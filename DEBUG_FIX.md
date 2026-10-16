@@ -48,6 +48,10 @@
    - **Problem**: The dirt tiles were not visible because they were rendered as single-sided planes facing upward, while the camera was above looking down, resulting in the back faces being culled.
    - **Fix**: Set `material.dirt.side = THREE.DoubleSide` to make the dirt tiles visible from both sides.
 
+7. **Player Starting Position Trapped in Wall**
+   - **Problem**: The player started at grid position (0,0), which is a corner wall tile, preventing any movement because all adjacent tiles were either out of bounds or walls.
+   - **Fix**: Changed the initial player position to (1,1), a dirt tile, allowing free movement.
+
 ## Remaining Warnings (Non-Breaking)
 
 - **Permissions-Policy Header Warnings**: Messages like "Unrecognized feature: 'run-ad-auction'" and "Unrecognized feature: 'join-ad-interest-group'" appear in the console. These are caused by the browser's default settings and do not affect functionality. They can be safely ignored.
