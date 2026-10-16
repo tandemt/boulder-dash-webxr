@@ -77,6 +77,10 @@
 
         let debugError = null;
         let frameCount = 0;
+        const tempMatrix = new THREE.Matrix4();
+        const raycaster = new THREE.Raycaster();
+        let diamond;
+        let updateLaserFn;
 
         function showErrorInPanel(message) {
             debugError = message;
@@ -140,7 +144,7 @@
                 // Add a diamond (or cube) to interact with
                 const diamondGeometry = new THREE.OctahedronGeometry(0.2, 0);
                 const diamondMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
-                const diamond = new THREE.Mesh(diamondGeometry, diamondMaterial);
+                diamond = new THREE.Mesh(diamondGeometry, diamondMaterial);
                 // Place diamond in front of the starting position (5 tiles ahead)
                 diamond.position.set(0, TILE_SIZE/2, -5 * TILE_SIZE); // y is half tile size to sit on top
                 diamond.castShadow = true;
@@ -198,7 +202,6 @@
                 scene.add(controllerGrip2);
 
                 // Raycaster for laser pointer
-                const raycaster = new THREE.Raycaster();
                 const laserGeometry = new THREE.CylinderGeometry(0.002, 0.002, 5, 12).rotateX(Math.PI / 2);
                 const laserMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
 
@@ -215,7 +218,6 @@
                 controller2.add(laser2);
 
                 // Temporary objects for intersection test
-                const tempMatrix = new THREE.Matrix4();
 
                 function onSelectStart(event) {
                     const controller = event.target;
@@ -278,6 +280,7 @@
                         }
                     }
                 }
+                updateLaserFn = updateLaser;
 
                 // Keyboard event listeners
                 window.addEventListener('keydown', onKeyDown);
@@ -464,8 +467,8 @@
 
         function render() {
             try {
-                updateLaser(controller1);
-                updateLaser(controller2);
+                updateLaserFn(controller1);
+                updateLaserFn(controller2);
 
                 renderer.render(scene, camera);
 

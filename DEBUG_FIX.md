@@ -40,6 +40,10 @@
    - **Problem**: The browser requests `favicon.ico` and receives a 404 since we haven't provided one.
    - **Fix**: Added `<link rel="icon" href="data:,">` to provide an empty favicon and prevent 404 errors.
 
+5. **updateLaser Not Defined Error**
+   - **Problem**: The `updateLaser` function was defined inside the `init()` function, making it inaccessible to the `render()` function, causing a "updateLaser is not defined" error.
+   - **Fix**: Moved the `updateLaser` function to outer scope, along with its dependencies (`tempMatrix`, `raycaster`, `diamond`), and used a closure pattern by assigning the inner function to an outer variable `updateLaserFn` inside `init()`, then calling `updateLaserFn` in `render()`.
+
 ## Remaining Warnings (Non-Breaking)
 
 - **Permissions-Policy Header Warnings**: Messages like "Unrecognized feature: 'run-ad-auction'" and "Unrecognized feature: 'join-ad-interest-group'" appear in the console. These are caused by the browser's default settings and do not affect functionality. They can be safely ignored.
