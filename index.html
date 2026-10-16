@@ -315,6 +315,7 @@
         function createGridMeshes() {
             const geometry_dirt = new THREE.PlaneGeometry(TILE_SIZE, TILE_SIZE);
             const material_dirt = new THREE.MeshStandardMaterial({ color: 0x8b4513 }); // saddle brown
+        material_dirt.side = THREE.DoubleSide;
 
             const geometry_wall = new THREE.BoxGeometry(TILE_SIZE, TILE_SIZE, TILE_SIZE);
             const material_wall = new THREE.MeshStandardMaterial({ color: 0x555555 }); // dark gray

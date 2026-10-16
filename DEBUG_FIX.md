@@ -44,6 +44,10 @@
    - **Problem**: The `updateLaser` function was defined inside the `init()` function, making it inaccessible to the `render()` function, causing a "updateLaser is not defined" error.
    - **Fix**: Moved the `updateLaser` function to outer scope, along with its dependencies (`tempMatrix`, `raycaster`, `diamond`), and used a closure pattern by assigning the inner function to an outer variable `updateLaserFn` inside `init()`, then calling `updateLaserFn` in `render()`.
 
+6. **Grid Not Visible (Dirt Tiles Invisible)**
+   - **Problem**: The dirt tiles were not visible because they were rendered as single-sided planes facing upward, while the camera was above looking down, resulting in the back faces being culled.
+   - **Fix**: Set `material.dirt.side = THREE.DoubleSide` to make the dirt tiles visible from both sides.
+
 ## Remaining Warnings (Non-Breaking)
 
 - **Permissions-Policy Header Warnings**: Messages like "Unrecognized feature: 'run-ad-auction'" and "Unrecognized feature: 'join-ad-interest-group'" appear in the console. These are caused by the browser's default settings and do not affect functionality. They can be safely ignored.
