@@ -59,13 +59,63 @@
         let tiles = []; // 2D array of meshes
         let tilePresent = []; // 2D boolean array indicating if tile is present (for backward compatibility with laser)
         let playerGridX = 1, playerGridZ = 1; // player's grid position
-        let gameObjects = []; // array to hold meshes of objects like diamonds
+        let gameObjects = []; // array to hold boulders and diamonds with logic and rendering properties
 
         // Tile types
         const TILE_EMPTY = 0;
         const TILE_DIRT = 1;
         const TILE_WALL = 2;
         let grid = []; // 2D array of tile types
+
+        // Object types
+        const OBJECT_PLAYER = 'player';
+        const OBJECT_BOULDER = 'boulder';
+        const OBJECT_DIAMOND = 'diamond';
+
+        // Logic tick
+        const LOGIC_TICK = 1/10; // 10 ticks per second in seconds
+        let lastLogicTime = 0;
+        let lag = 0;
+
+        function updateLogic() {
+            // Create a blocked grid for the start of the tick
+            const blocked = new Array(GRID_SIZE);
+            for (let i = 0; i < GRID_SIZE; i++) {
+                blocked[i] = new Array(GRID_SIZE);
+                for (let j = 0; j < GRID_SIZE; j++) {
+                    // Blocked if static tile is not empty (wall or dirt)
+                    blocked[i][j] = (grid[i][j] !== TILE_EMPTY);
+                }
+            }
+
+            // Block player position
+            blocked[playerGridX][playerGridZ] = true;
+
+            // Block positions of all game objects (boulders and diamonds)
+            for (const obj of gameObjects) {
+                blocked[obj.gridX][obj.gridZ] = true;
+            }
+
+            // Create a copy of gameObjects to avoid modifying the array while sorting? We'll sort by gridZ ascending (top to bottom)
+            const objectsToUpdate = [...gameObjects].sort((a, b) => a.gridZ - b.gridZ);
+
+            for (const obj of objectsToUpdate) {
+                if (!obj.canFall) continue;
+
+                // Check if the cell below is within bounds and not blocked
+                const belowZ = obj.gridZ + 1;
+                if (belowZ < GRID_SIZE && !blocked[obj.gridX][belowZ]) {
+                    // Object can fall: update last position to current
+                    obj.lastGridX = obj.gridX;
+                    obj.lastGridZ = obj.gridZ;
+                    // Move down one cell
+                    obj.gridZ = belowZ;
+                }
+                // Note: we do not update the blocked array for the object's new position in this tick because we are using the blocked array from the start of the tick.
+                // This prevents an object from falling more than one cell per tick and prevents objects from falling through each other in the same tick.
+            }
+        }
+
 
         // Default level
         const DEFAULT_LEVEL = {
@@ -87,7 +137,8 @@
           ],
           "objects": [
             {"type": "player", "x": 1, "y": 1},
-            {"type": "diamond", "x": 5, "y": 5}
+            {"type": "diamond", "x": 5, "y": 5},
+            {"type": "boulder", "x": 3, "y": 3}
           ]
         };
 
@@ -337,7 +388,11 @@
             }
 
             // Reset gameObjects array and create objects from the level
-            gameObjects.forEach(obj => scene.remove(obj)); // remove any existing objects
+            gameObjects.forEach(obj => {
+                if (obj.mesh) {
+                    scene.remove(obj.mesh);
+                }
+            }); // remove any existing objects
             gameObjects = [];
 
             // Set default player start position
@@ -352,16 +407,22 @@
                         // Create a diamond mesh
                         const diamondGeometry = new THREE.OctahedronGeometry(0.2, 0);
                         const diamondMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
-                        const diamond = new THREE.Mesh(diamondGeometry, diamondMaterial);
+                        const diamondMesh = new THREE.Mesh(diamondGeometry, diamondMaterial);
                         // Place the diamond at the center of the cell (x, y, z) in world coordinates
                         const worldX = (obj.x - GRID_SIZE/2 + 0.5) * TILE_SIZE;
                         const worldY = TILE_SIZE/2; // half a tile up to sit on the ground
                         const worldZ = (obj.y - GRID_SIZE/2 + 0.5) * TILE_SIZE;
-                        diamond.position.set(worldX, worldY, worldZ);
-                        diamond.castShadow = true;
-                        diamond.receiveShadow = true;
-                        scene.add(diamond);
-                        gameObjects.push(diamond);
+                        diamondMesh.position.set(worldX, worldY, worldZ);
+                        diamondMesh.castShadow = true;
+                        diamondMesh.receiveShadow = true;
+                        scene.add(diamondMesh);
+                        gameObjects.push({
+                            mesh: diamondMesh,
+                            gridX: obj.x,
+                            gridZ: obj.y,
+                            lastGridX: obj.x,
+                            lastGridZ: obj.y
+                        });
                     }
                     // Add other object types as needed
                 }
@@ -478,12 +539,22 @@
         function movePlayer(dx, dz) {
             const newX = playerGridX + dx;
             const newZ = playerGridZ + dz;
-            // Check bounds and if the tile is not a wall
+            // Check bounds and if the tile is not a wall and not occupied by a boulder
             if (newX >= 0 && newX < GRID_SIZE && newZ >= 0 && newZ < GRID_SIZE) {
                 if (grid[newX][newZ] !== TILE_WALL) {
-                    playerGridX = newX;
-                    playerGridZ = newZ;
-                    updateCameraPosition();
+                    // Check for boulder at the target cell
+                    let boulderHere = false;
+                    for (const obj of gameObjects) {
+                        if (obj.type === OBJECT_BOULDER && obj.gridX === newX && obj.gridZ === newZ) {
+                            boulderHere = true;
+                            break;
+                        }
+                    }
+                    if (!boulderHere) {
+                        playerGridX = newX;
+                        playerGridZ = newZ;
+                        updateCameraPosition();
+                    }
                 }
             }
         }
@@ -491,14 +562,24 @@
         function digAdjacent(dx, dz) {
             const targetX = playerGridX + dx;
             const targetZ = playerGridZ + dz;
-            // Check bounds and if the tile is dirt (diggable)
+            // Check bounds and if the tile is dirt and not occupied by a boulder
             if (targetX >= 0 && targetX < GRID_SIZE && targetZ >= 0 && targetZ < GRID_SIZE) {
                 if (grid[targetX][targetZ] === TILE_DIRT) {
-                    // Remove the tile from the scene
-                    scene.remove(tiles[targetX][targetZ]);
-                    tiles[targetX][targetZ] = null;
-                    grid[targetX][targetZ] = TILE_EMPTY;
-                    tilePresent[targetX][targetZ] = false; // update for laser intersection
+                    // Check for boulder at the target cell
+                    let boulderHere = false;
+                    for (const obj of gameObjects) {
+                        if (obj.type === OBJECT_BOULDER && obj.gridX === targetX && obj.gridZ === targetZ) {
+                            boulderHere = true;
+                            break;
+                        }
+                    }
+                    if (!boulderHere) {
+                        // Remove the tile from the scene
+                        scene.remove(tiles[targetX][targetZ]);
+                        tiles[targetX][targetZ] = null;
+                        grid[targetX][targetZ] = TILE_EMPTY;
+                        tilePresent[targetX][targetZ] = false; // update for laser intersection
+                    }
                 }
             }
         }
@@ -517,22 +598,32 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
-        function animate() {
-            try {
-                if (!renderer) {
-                    showErrorInPanel('Renderer not initialized');
-                    return;
-                }
-                renderer.setAnimationLoop(render);
-            } catch (error) {
-                showErrorInPanel('Error in animate: ' + error.message);
+        function animate(time) {
+            time = time * 0.001; // convert to seconds
+            const deltaTime = time - lastLogicTime;
+            lastLogicTime = time;
+            lag += deltaTime;
+            while (lag >= LOGIC_TICK) {
+                updateLogic();
+                lag -= LOGIC_TICK;
             }
+            render(Math.min(lag / LOGIC_TICK, 1)); // alpha for interpolation
         }
 
-        function render() {
+        function render(alpha) {
             try {
                 updateLaserFn(controller1);
                 updateLaserFn(controller2);
+
+                // Interpolate the position of each game object (boulders and diamonds)
+                for (const obj of gameObjects) {
+                    const interpX = obj.lastGridX + (obj.gridX - obj.lastGridX) * alpha;
+                    const interpZ = obj.lastGridZ + (obj.gridZ - obj.lastGridZ) * alpha;
+                    const worldX = (interpX - GRID_SIZE/2 + 0.5) * TILE_SIZE;
+                    const worldZ = (interpZ - GRID_SIZE/2 + 0.5) * TILE_SIZE;
+                    const worldY = TILE_SIZE/2; // keep y constant (half a tile up)
+                    obj.mesh.position.set(worldX, worldY, worldZ);
+                }
 
                 renderer.render(scene, camera);
 
