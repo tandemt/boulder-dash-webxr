@@ -8,11 +8,22 @@
 
 2. **ES Module Import Errors**
    - **Problem**: After converting to ES modules, the browser failed to resolve module specifiers for `three` and the examples because the imports were incorrect or the server was serving an outdated version.
-   - **Fix**: Updated imports to use the ES module build of Three.js (`three.module.js`) and the correct paths for the examples:
+   - **Fix**: Updated imports to use an import map for cleaner bare specifiers:
+     ```html
+     <script type="importmap">
+       {
+         "imports": {
+           "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
+         }
+       }
+     </script>
+     ```
+     and changed the imports to:
      ```javascript
-     import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js';
-     import { VRButton } from 'https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/webxr/VRButton.js';
-     import { XRControllerModelFactory } from 'https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/webxr/XRControllerModelFactory.js';
+     import * as THREE from 'three';
+     import { VRButton } from 'three/addons/webxr/VRButton.js';
+     import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
      ```
 
 3. **Renderer Not Initialized Error**
@@ -25,10 +36,13 @@
      }
      ```
 
+4. **Missing Favicon**
+   - **Problem**: The browser requests `favicon.ico` and receives a 404 since we haven't provided one.
+   - **Fix**: Added `<link rel="icon" href="data:,">` to provide an empty favicon and prevent 404 errors.
+
 ## Remaining Warnings (Non-Breaking)
 
-- **Permissions-Policy Header Warnings**: Messages like "Unrecognized feature: 'run-ad-auction'" and "Unrecognized feature: 'join-ad-interest-group'" appear in the console. These are caused by the server's default headers and do not affect functionality. They can be ignored.
-- **Favicon 404**: The browser requests `favicon.ico` and receives a 404 since we haven't provided one. This is optional and does not break the application.
+- **Permissions-Policy Header Warnings**: Messages like "Unrecognized feature: 'run-ad-auction'" and "Unrecognized feature: 'join-ad-interest-group'" appear in the console. These are caused by the browser's default settings and do not affect functionality. They can be safely ignored.
 
 ## Testing Instructions
 
