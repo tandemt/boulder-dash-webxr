@@ -31,14 +31,12 @@
     <button id="vr-button">Enter VR</button>
     <div id="debug-panel"></div>
 
-    <!-- Three.js from CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.min.js"></script>
-    <!-- WebXR helper for Three.js -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/webxr/VRButton.js"></script>
-    <!-- WebXR Input Profiles for controller models -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/webxr/XRControllerModelFactory.js"></script>
+    <script type="module">
+        // Import three.js and the VRButton helper
+        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js';
+        import { VRButton } from 'https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/webxr/VRButton.js';
+        import { XRControllerModelFactory } from 'https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/webxr/XRControllerModelFactory.js';
 
-    <script>
         // Basic Three.js setup
         let scene, camera, renderer;
         let controller1, controller2;
@@ -113,9 +111,6 @@
             panel.textContent = info.join('\n');
         }
 
-        init();
-        animate();
-
         function init() {
             try {
                 // Scene
@@ -167,13 +162,10 @@
                 renderer.domElement.style.border = '2px solid red';
 
                 // VR Button
-                const vrButton = new VRButton(renderer, { onEnter: () => {
-                        console.log('VR session started');
-                    }, onExit: () => {
-                        console.log('VR session ended');
-                    }
+                const vrButton = VRButton.createButton(renderer, {
+                    optionalFeatures: ['local-floor', 'bounded-floor', 'layers']
                 });
-                document.getElementById('vr-button').appendChild(vrButton.domElement);
+                document.getElementById('vr-button').appendChild(vrButton);
 
                 // Controllers
                 controller1 = renderer.xr.getController(0);
@@ -387,6 +379,7 @@
                     keys.Shift = false;
                     break;
             }
+            handleKeys();
         }
 
         function handleKeys() {
@@ -472,6 +465,9 @@
                 showErrorInPanel('Error in render: ' + error.message);
             }
         }
+
+        init();
+        animate();
     </script>
 </body>
 </html>
