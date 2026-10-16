@@ -38,7 +38,7 @@
 
 4. **Missing Favicon**
    - **Problem**: The browser requests `favicon.ico` and receives a 404 since we haven't provided one.
-   - **Fix**: Added `<link rel="icon" href="data:,">` to provide an empty favicon and prevent 404 errors.
+   - **Fix**: Added `<link rel="icon" href="data:">` to provide an empty favicon and prevent 404 errors.
 
 5. **updateLaser Not Defined Error**
    - **Problem**: The `updateLaser` function was defined inside the `init()` function, making it inaccessible to the `render()` function, causing a "updateLaser is not defined" error.
