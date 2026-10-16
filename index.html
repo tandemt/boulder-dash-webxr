@@ -445,7 +445,8 @@
             // Convert grid position to world position (center of tile)
             const worldX = (playerGridX - GRID_SIZE/2 + 0.5) * TILE_SIZE;
             const worldZ = (playerGridZ - GRID_SIZE/2 + 0.5) * TILE_SIZE;
-            camera.position.set(worldX, 1.6, worldZ); // eye level height
+            camera.position.set(worldX, 1.6, worldZ);
+            camera.lookAt(worldX, 0, worldZ); // look straight down at the tile
         }
 
         function onWindowResize() {
