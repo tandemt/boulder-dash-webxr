@@ -3,17 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boulder Dash WebXR - Falling Mechanics Test</title>
+    <!-- Import map for Three.js module resolution -->
     <script type="importmap">
-  {
-    "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
-    }
-  }
-</script>
-
-    <link rel="icon" href="data:">
-    <title>Three.js WebXR Basic Example with Keyboard Controls</title>
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.162.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.162.0/examples/jsm/"
+        }
+      }
+    </script>
     <style>
         body { margin: 0; overflow: hidden; }
         #vr-button {
@@ -42,10 +41,54 @@
     <div id="debug-panel"></div>
 
     <script type="module">
-        // Import three.js and the VRButton helper
-        import * as THREE from "three";
-        import { VRButton } from "three/addons/webxr/VRButton.js";
-        import { XRControllerModelFactory } from "three/addons/webxr/XRControllerModelFactory.js";
+        // Default level for testing falling mechanics
+        const TEST_FALLING_LEVEL = {
+          "width": 9,
+          "height": 9,
+          "timeLimit": 60,
+          "diamondsRequired": 1,
+          "grid": [
+            ["W","W","W","W","W","W","W","W","W"], // z=0
+            ["W",".",".",".",".",".",".",".","W"], // z=1
+            ["W",".",".","B",".",".",".",".","W"], // z=2 - boulder at (2,2)
+            ["W",".",".",".",".",".",".",".","W"], // z=3
+            ["W",".",".",".",".",".",".",".","W"], // z=4
+            ["W",".",".",".",".",".",".",".","W"], // z=5
+            ["W",".","D","D","D","D","D",".","W"], // z=6 - platform dirt at x=2,3,4,5,6
+            ["W",".",".",".",".",".",".",".","W"], // z=7
+            ["W","W","W","W","W","W","W","W","W"]  // z=8
+          ],
+          "objects": [
+            {"type": "player", "x": 1, "y": 1}, // player at (1,1) - top left
+            {"type": "diamond", "x": 4, "y": 5}, // diamond sitting on platform at (4,5) - will NOT fall
+            {"type": "boulder", "x": 2, "y": 2}   // falling boulder at (2,2) - will fall to (2,5) then stop
+          ]
+        };
+
+        // Default level
+        const DEFAULT_LEVEL = {
+          "width": 10,
+          "height": 10,
+          "timeLimit": 180,
+          "diamondsRequired": 3,
+          "grid": [
+            ["W","W","W","W","W","W","W","W","W","W"],
+            ["W","D","D","D","D","D","D","D","D","W"],
+            ["W","D","D","D","D","D","D","D","D","W"],
+            ["W","D","D","D","D","D","D","D","D","W"],
+            ["W","D","D","D","D","D","D","D","D","W"],
+            ["W","D","D","D","D","D","D","D","D","W"],
+            ["W","D","D","D","D","D","D","D","D","W"],
+            ["W","D","D","D","D","D","D","D","D","W"],
+            ["W","D","D","D","D","D","D","D","D","W"],
+            ["W","W","W","W","W","W","W","W","W","W"]
+          ],
+          "objects": [
+            {"type": "player", "x": 1, "y": 1},
+            {"type": "diamond", "x": 5, "y": 5},
+            {"type": "boulder", "x": 3, "y": 3}
+          ]
+        };
 
         // Basic Three.js setup
         let scene, camera, renderer;
@@ -77,80 +120,7 @@
         let lastLogicTime = 0;
         let lag = 0;
 
-        function updateLogic() {
-            // Create a blocked grid for the start of the tick
-            const blocked = new Array(GRID_SIZE);
-            for (let i = 0; i < GRID_SIZE; i++) {
-                blocked[i] = new Array(GRID_SIZE);
-                for (let j = 0; j < GRID_SIZE; j++) {
-                    // Blocked if static tile is not empty (wall or dirt)
-                    blocked[i][j] = (grid[i][j] !== TILE_EMPTY);
-                }
-            }
-
-            // Block player position
-            blocked[playerGridX][playerGridZ] = true;
-
-            // Block positions of all game objects (boulders and diamonds)
-            for (const obj of gameObjects) {
-                blocked[obj.gridX][obj.gridZ] = true;
-            }
-
-            // Create a copy of gameObjects to avoid modifying the array while sorting? We'll sort by gridZ ascending (top to bottom)
-            const objectsToUpdate = [...gameObjects].sort((a, b) => a.gridZ - b.gridZ);
-
-            for (const obj of objectsToUpdate) {
-                if (!obj.canFall) continue;
-
-                // Check if the cell below is within bounds and not blocked
-                const belowZ = obj.gridZ + 1;
-                if (belowZ < GRID_SIZE && !blocked[obj.gridX][belowZ]) {
-                    // Object can fall: update last position to current
-                    obj.lastGridX = obj.gridX;
-                    obj.lastGridZ = obj.gridZ;
-                    // Move down one cell
-                    obj.gridZ = belowZ;
-                }
-                // Note: we do not update the blocked array for the object's new position in this tick because we are using the blocked array from the start of the tick.
-                // This prevents an object from falling more than one cell per tick and prevents objects from falling through each other in the same tick.
-            }
-        }
-
-
-        // Default level
-        const DEFAULT_LEVEL = {
-          "width": 10,
-          "height": 10,
-          "timeLimit": 180,
-          "diamondsRequired": 3,
-          "grid": [
-            ["W","W","W","W","W","W","W","W","W","W"],
-            ["W","D","D","D","D","D","D","D","D","W"],
-            ["W","D","D","D","D","D","D","D","D","W"],
-            ["W","D","D","D","D","D","D","D","D","W"],
-            ["W","D","D","D","D","D","D","D","D","W"],
-            ["W","D","D","D","D","D","D","D","D","W"],
-            ["W","D","D","D","D","D","D","D","D","W"],
-            ["W","D","D","D","D","D","D","D","D","W"],
-            ["W","D","D","D","D","D","D","D","D","W"],
-            ["W","W","W","W","W","W","W","W","W","W"]
-          ],
-          "objects": [
-            {"type": "player", "x": 1, "y": 1},
-            {"type": "diamond", "x": 5, "y": 5},
-            {"type": "boulder", "x": 3, "y": 3}
-          ]
-        };
-
-        // Keyboard state
-        const keys = {
-            w: false,
-            a: false,
-            s: false,
-            d: false,
-            Shift: false
-        };
-
+        // Debug panel variables
         let debugError = null;
         let frameCount = 0;
         const tempMatrix = new THREE.Matrix4();
@@ -210,7 +180,7 @@
                 camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
 
                 // Initialize grid with test level: walls around edges, dirt inside
-                initGrid(DEFAULT_LEVEL);
+                initGrid(TEST_FALLING_LEVEL);
 
                 // Create grid meshes
                 createGridMeshes();
@@ -455,28 +425,6 @@
                             lastGridX: obj.x,
                             lastGridZ: obj.y,
                             canFall: false // diamonds do not fall
-                        });
-                    } else if (obj.type === "boulder") {
-                        // Create a boulder mesh
-                        const boulderGeometry = new THREE.BoxGeometry(TILE_SIZE * 0.6, TILE_SIZE * 0.6, TILE_SIZE * 0.6);
-                        const boulderMaterial = new THREE.MeshStandardMaterial({ color: 0x8b4513 }); // saddle brown
-                        const boulderMesh = new THREE.Mesh(boulderGeometry, boulderMaterial);
-                        // Place the boulder at the center of the cell (x, y, z) in world coordinates
-                        const worldX = (obj.x - GRID_SIZE/2 + 0.5) * TILE_SIZE;
-                        const worldY = TILE_SIZE/2; // half a tile up to sit on the ground
-                        const worldZ = (obj.y - GRID_SIZE/2 + 0.5) * TILE_SIZE;
-                        boulderMesh.position.set(worldX, worldY, worldZ);
-                        boulderMesh.castShadow = true;
-                        boulderMesh.receiveShadow = true;
-                        scene.add(boulderMesh);
-                        gameObjects.push({
-                            mesh: boulderMesh,
-                            type: OBJECT_BOULDER,
-                            gridX: obj.x,
-                            gridZ: obj.y,
-                            lastGridX: obj.x,
-                            lastGridZ: obj.y,
-                            canFall: true // boulders can fall
                         });
                     }
                     // Add other object types as needed
