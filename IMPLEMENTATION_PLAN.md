@@ -71,30 +71,36 @@
     - Create level loading system that supports multiple levels
     - Implement level progression system
     - Create level selection menu UI
+    - ✅ COMPLETED
+
+16. **Create player with Animations** (1.0 days)
+    - Add animated player model with walking/idle states
+    - Implement sprite sheet or keyframe animation system
+    - Add animation transitions based on player state (moving, digging, idle)
     - PENDING
 
 ## Future Milestones
 
-16. **Multiple Level Support** (0.5 days)
+17. **Multiple Level Support** (0.5 days)
     - Implement level sequencing and progression
     - Add level completion detection
     - PLANNED
 
-17. **Enhanced Graphics and Effects** (1.0 days)
+18. **Enhanced Graphics and Effects** (1.0 days)
     - Improve visual effects for digging, falling, etc.
     - Add particle systems or animations
     - PLANNED
 
-18. **Sound Effects and Music** (0.5 days)
+19. **Sound Effects and Music** (0.5 days)
     - Add audio feedback for actions
     - PLANNED
 
-19. **UI Refinements and Polish** (0.75 days)
+20. **UI Refinements and Polish** (0.75 days)
     - Improve debug panel information
     - Add game over and victory conditions
     - PLANNED
 
-20. **Performance Optimization** (0.5 days)
+21. **Performance Optimization** (0.5 days)
     - Optimize rendering and logic updates
     - PLANNED
 
