@@ -208,13 +208,15 @@
 
                 // Camera
                 camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
-                updateCameraPosition();
 
                 // Initialize grid with test level: walls around edges, dirt inside
                 initGrid(DEFAULT_LEVEL);
 
                 // Create grid meshes
                 createGridMeshes();
+
+                // Set initial camera position after grid is initialized
+                updateCameraPosition();
 
 
                 // Lights
@@ -661,6 +663,8 @@
                 lag -= LOGIC_TICK;
             }
             render(Math.min(lag / LOGIC_TICK, 1)); // alpha for interpolation
+
+            requestAnimationFrame(animate);
         }
 
         function render(alpha) {
