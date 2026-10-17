@@ -65,13 +65,13 @@
     - Enhanced movement/digging to handle boulder obstacles
     - ✅ COMPLETED (by agent)
 
-## Current Work
-
 15. **JSON-Based Level Loading System** (0.75 days)
     - Create level loading system that supports multiple levels
     - Implement level progression system
     - Create level selection menu UI
     - ✅ COMPLETED
+
+## Current Work
 
 16. **Create player with Animations** (1.0 days)
     - Add animated player model with walking/idle states
