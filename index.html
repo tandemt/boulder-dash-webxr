@@ -53,6 +53,22 @@
       line-height: 1.6;
       z-index: 5;
     }
+
+    /* Level Selection UI Styles */
+    .level-option {
+      margin: 10px 0;
+      padding: 12px 24px;
+      background: rgba(0, 0, 0, 0.5);
+      border: 2px solid #00ff00;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .level-option:hover {
+      background: rgba(0, 0, 0, 0.7);
+      transform: scale(1.05);
+    }
   </style>
 </head>
 
@@ -70,31 +86,87 @@
     import { VRButton } from 'three/addons/webxr/VRButton.js';
 
     // --------------------------------------------------
-    // LEVEL
+    // LEVELS
     // --------------------------------------------------
 
-    const LEVEL = {
-      width: 9,
-      height: 9,
+    const LEVELS = [
+      {
+        "width": 9,
+        "height": 9,
+        "timeLimit": 60,
+        "diamondsRequired": 1,
+        "grid": [
+          ["W","W","W","W","W","W","W","W","W"],
+          ["W",".",".",".",".",".",".",".","W"],
+          ["W",".",".","B",".",".",".",".","W"], // boulder at (2,2)
+          ["W",".",".",".",".",".",".",".","W"],
+          ["W",".",".",".",".",".",".",".","W"],
+          ["W",".",".",".",".",".",".",".","W"],
+          ["W",".","D","D","D","D","D",".","W"], // dirt platform at x=2,3,4,5,6
+          ["W",".",".",".",".",".",".",".","W"],
+          ["W","W","W","W","W","W","W","W","W"]
+        ],
+        "objects": [
+          {"type": "player", "x": 1, "y": 1},
+          {"type": "diamond", "x": 4, "y": 5},
+          {"type": "boulder", "x": 2, "y": 2}
+        ]
+      },
+      {
+        "width": 10,
+        "height": 10,
+        "timeLimit": 120,
+        "diamondsRequired": 2,
+        "grid": [
+          ["W","W","W","W","W","W","W","W","W","W"],
+          ["W",".",".",".",".",".",".",".",".","W"],
+          ["W",".",".",".",".",".",".","B",".","W"], // boulder at (2,7)
+          ["W",".",".",".",".",".",".",".",".","W"],
+          ["W",".",".",".",".",".","D",".",".","W"], // dirt at (6,2)
+          ["W",".",".",".",".",".","D",".",".","W"], // dirt at (6,3)
+          ["W",".",".",".",".",".","D",".",".","W"], // dirt at (6,4)
+          ["W",".",".",".",".",".",".",".",".","W"],
+          ["W",".","D","D","D","D","D","D",".","W"], // dirt platform at x=1-7, y=7
+          ["W","W","W","W","W","W","W","W","W","W"]
+        ],
+        "objects": [
+          {"type": "player", "x": 1, "y": 1},
+          {"type": "diamond", "x": 8, "y": 2},
+          {"type": "diamond", "x": 8, "y": 8}
+        ]
+      },
+      {
+        "width": 12,
+        "height": 8,
+        "timeLimit": 90,
+        "diamondsRequired": 3,
+        "grid": [
+          ["W","W","W","W","W","W","W","W","W","W","W","W"],
+          ["W",".",".",".",".",".",".",".",".",".",".","W"],
+          ["W",".",".","B",".",".",".",".",".",".",".","W"], // boulder at (2,2)
+          ["W",".",".",".",".",".",".",".",".",".",".","W"],
+          ["W",".",".",".",".",".",".",".",".","D",".","W"], // dirt at (9,3)
+          ["W",".",".",".",".",".",".",".",".","D",".","W"], // dirt at (9,4)
+          ["W",".",".",".",".",".",".",".",".","D",".","W"], // dirt at (9,5)
+          ["W",".","D","D","D","D","D","D","D","D",".","W"], // dirt platform
+          ["W","W","W","W","W","W","W","W","W","W","W","W"]
+        ],
+        "objects": [
+          {"type": "player", "x": 1, "y": 1},
+          {"type": "diamond", "x": 5, "y": 2},
+          {"type": "diamond", "x": 6, "y": 5},
+          {"type": "diamond", "x": 10, "y": 6}
+        ]
+      }
+    ];
 
-      grid: [
-        ["W","W","W","W","W","W","W","W","W"],
-        ["W",".",".",".",".",".",".",".","W"],
-        ["W",".",".",".",".",".",".",".","W"],
-        ["W",".",".",".",".",".",".",".","W"],
-        ["W",".",".",".",".",".",".",".","W"],
-        ["W",".",".",".",".",".",".",".","W"],
-        ["W",".","D","D","D","D","D",".","W"],
-        ["W",".",".",".",".",".",".",".","W"],
-        ["W","W","W","W","W","W","W","W","W"]
-      ],
+    // Current level tracking
+    let currentLevelIndex = 0;
+    let levelData = null;
 
-      objects: [
-        { type: "player", x: 1, y: 1 },
-        { type: "diamond", x: 4, y: 5 },
-        { type: "boulder", x: 2, y: 2 }
-      ]
-    };
+    // Level completion tracking
+    let initialDiamondCount = 0;
+    let collectedDiamondCount = 0;
 
     // --------------------------------------------------
     // CONSTANTS AND STATE
@@ -144,11 +216,11 @@
     // --------------------------------------------------
 
     function worldX(x) {
-      return (x - LEVEL.width / 2 + 0.5) * TILE_SIZE;
+      return (x - levelData.width / 2 + 0.5) * TILE_SIZE;
     }
 
     function worldZ(z) {
-      return (z - LEVEL.height / 2 + 0.5) * TILE_SIZE;
+      return (z - levelData.height / 2 + 0.5) * TILE_SIZE;
     }
 
     function showError(error) {
@@ -216,21 +288,21 @@
     // GRID
     // --------------------------------------------------
 
-    function initGrid() {
+    function initGrid(levelData) {
       grid = Array.from(
-        { length: LEVEL.height },
-        () => Array(LEVEL.width).fill(EMPTY)
+        { length: levelData.height },
+        () => Array(levelData.width).fill(EMPTY)
       );
 
       tiles = Array.from(
-        { length: LEVEL.height },
-        () => Array(LEVEL.width).fill(null)
+        { length: levelData.height },
+        () => Array(levelData.width).fill(null)
       );
 
       // Rows are Z; columns are X.
-      for (let z = 0; z < LEVEL.height; z++) {
-        for (let x = 0; x < LEVEL.width; x++) {
-          const cell = LEVEL.grid[z][x];
+      for (let z = 0; z < levelData.height; z++) {
+        for (let x = 0; x < levelData.width; x++) {
+          const cell = levelData.grid[z][x];
 
           grid[z][x] =
             cell === 'W' ? WALL :
@@ -242,7 +314,7 @@
       playerX = 1;
       playerZ = 1;
 
-      for (const obj of LEVEL.objects) {
+      for (const obj of levelData.objects) {
         if (obj.type === 'player') {
           playerX = obj.x;
           playerZ = obj.y;
@@ -263,8 +335,8 @@
         color: 0x8b4513
       });
 
-      for (let z = 0; z < LEVEL.height; z++) {
-        for (let x = 0; x < LEVEL.width; x++) {
+      for (let z = 0; z < levelData.height; z++) {
+        for (let x = 0; x < levelData.width; x++) {
           let mesh = null;
 
           if (grid[z][x] === WALL) {
@@ -320,8 +392,8 @@
       const z = playerZ + dz;
 
       if (
-        x < 0 || x >= LEVEL.width ||
-        z < 0 || z >= LEVEL.height
+        x < 0 || x >= levelData.width ||
+        z < 0 || z >= levelData.height
       ) return;
 
       if (grid[z][x] === WALL) return;
@@ -335,6 +407,12 @@
       if (diamond) {
         scene.remove(diamond.mesh);
         gameObjects = gameObjects.filter(obj => obj !== diamond);
+        collectedDiamondCount++;
+
+        // Check for level completion
+        if (collectedDiamondCount >= initialDiamondCount && initialDiamondCount > 0) {
+          completeLevel();
+        }
       }
 
       // Walking through dirt digs it automatically.
@@ -346,13 +424,81 @@
       updateCameraPosition();
     }
 
+    // --------------------------------------------------
+    // LEVEL COMPLETION
+    // --------------------------------------------------
+
+    function completeLevel() {
+      // Show level completion message
+      showLevelCompleteUI();
+
+      // Wait briefly then proceed to next level (in a real game, you might wait for player input)
+      setTimeout(() => {
+        hideLevelCompleteUI();
+        loadNextLevel();
+      }, 2000); // 2 second delay to show completion message
+    }
+
+    function loadNextLevel() {
+      currentLevelIndex++;
+      if (currentLevelIndex >= LEVELS.length) {
+        currentLevelIndex = 0; // Loop back to first level
+      }
+
+      // Reset game state for new level
+      resetLevel();
+    }
+
+    function resetLevel() {
+      // Clear existing game objects and meshes
+      gameObjects.forEach(obj => {
+        if (obj.mesh) {
+          scene.remove(obj.mesh);
+        }
+      });
+      gameObjects = [];
+
+      // Clear existing tile meshes
+      tiles.forEach(row => {
+        row.forEach(tile => {
+          if (tile) {
+            scene.remove(tile);
+          }
+        });
+      });
+
+      // Reset tiles array
+      tiles = Array.from(
+        { length: levelData.height },
+        () => Array(levelData.width).fill(null)
+      );
+
+      // Reload level data
+      levelData = JSON.parse(JSON.stringify(LEVELS[currentLevelIndex]));
+      initGrid(levelData);
+
+      // Reset diamond counting
+      initialDiamondCount = levelData.objects.filter(obj => obj.type === 'diamond').length;
+      collectedDiamondCount = 0;
+
+      // Recreate grid meshes
+      createGridMeshes();
+
+      // Reset player position (will be set in initGrid)
+      updateCameraPosition();
+
+      // Hide any UI and show debug panel
+      hideUI();
+      document.getElementById('debug-panel').style.display = 'block';
+    }
+
     function digAdjacent(dx, dz) {
       const x = playerX + dx;
       const z = playerZ + dz;
 
       if (
-        x < 0 || x >= LEVEL.width ||
-        z < 0 || z >= LEVEL.height
+        x < 0 || x >= levelData.width ||
+        z < 0 || z >= levelData.height
       ) return;
 
       if (objectAt(x, z)) return;
@@ -437,7 +583,7 @@
         const x = boulder.x;
         const belowZ = boulder.z + 1;
 
-        if (belowZ >= LEVEL.height) continue;
+        if (belowZ >= levelData.height) continue;
 
         // Stop on walls or dirt.
         if (grid[belowZ][x] !== EMPTY) continue;
@@ -560,11 +706,125 @@
 
       panel.textContent =
         `Three.js: ${THREE.REVISION}\n` +
+        `Level: ${currentLevelIndex + 1}/${LEVELS.length}\n` +
         `Player: (${playerX}, ${playerZ})\n` +
+        `Diamonds: ${collectedDiamondCount}/${initialDiamondCount}\n` +
         `Objects: ${gameObjects.length}\n` +
         `Boulders: ${gameObjects.filter(o => o.type === 'boulder').length}\n` +
         `VR active: ${renderer.xr.isPresenting}\n` +
         `Frame: ${frameCount}`;
+    }
+
+    // --------------------------------------------------
+    // UI FUNCTIONS
+    // --------------------------------------------------
+
+    function showLevelCompleteUI() {
+      // Create or show level completion overlay
+      let overlay = document.getElementById('level-complete-overlay');
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'level-complete-overlay';
+        overlay.style.position = 'absolute';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+        overlay.style.color = '#00ff00';
+        overlay.style.display = 'flex';
+        overlay.style.flexDirection = 'column';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+        overlay.style.fontSize = '24pt';
+        overlay.style.zIndex = '1000';
+        overlay.style.textAlign = 'center';
+        overlay.style.padding = '20px';
+        overlay.style.boxSizing = 'border-box';
+        document.body.appendChild(overlay);
+      }
+
+      overlay.innerHTML = `
+        <div>Level Complete!</div>
+        <div>Collected ${collectedDiamondCount}/${initialDiamondCount} diamonds</div>
+        <div>Loading next level...</div>
+      `;
+      overlay.style.display = 'flex';
+    }
+
+    function hideLevelCompleteUI() {
+      const overlay = document.getElementById('level-complete-overlay');
+      if (overlay) {
+        overlay.style.display = 'none';
+      }
+    }
+
+    function showLevelSelectionUI() {
+      // Create or show level selection overlay
+      let overlay = document.getElementById('level-selection-overlay');
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'level-selection-overlay';
+        overlay.style.position = 'absolute';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+        overlay.style.color = '#00ff00';
+        overlay.style.display = 'flex';
+        overlay.style.flexDirection = 'column';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+        overlay.style.fontSize = '18pt';
+        overlay.style.zIndex = '1000';
+        overlay.style.textAlign = 'center';
+        overlay.style.padding = '20px';
+        overlay.style.boxSizing = 'border-box';
+        document.body.appendChild(overlay);
+      }
+
+      let levelListHTML = '<div>Select Level</div>';
+      LEVELS.forEach((level, index) => {
+        levelListHTML += `<div class="level-option" data-index="${index}">Level ${index + 1}</div>`;
+      });
+
+      overlay.innerHTML = levelListHTML + '<div style="margin-top: 20px; font-size: 14pt;">Use number keys 1-9 to select</div>';
+      overlay.style.display = 'flex';
+
+      // Add click handlers to level options
+      setTimeout(() => {
+        document.querySelectorAll('.level-option').forEach(option => {
+          option.addEventListener('click', () => {
+            const index = parseInt(option.getAttribute('data-index'));
+            if (index !== currentLevelIndex) {
+              currentLevelIndex = index;
+              hideLevelSelectionUI();
+              resetLevel();
+            }
+          });
+
+          // Add hover effect
+          option.addEventListener('mouseenter', () => {
+            option.style.color = '#ffff00';
+          });
+          option.addEventListener('mouseleave', () => {
+            option.style.color = '#00ff00';
+          });
+        });
+      }, 100);
+    }
+
+    function hideLevelSelectionUI() {
+      const overlay = document.getElementById('level-selection-overlay');
+      if (overlay) {
+        overlay.style.display = 'none';
+      }
+    }
+
+    function hideUI() {
+      hideLevelCompleteUI();
+      hideLevelSelectionUI();
     }
 
     // --------------------------------------------------
@@ -630,7 +890,14 @@
           100
         );
 
-        initGrid();
+        // Load current level data
+        levelData = JSON.parse(JSON.stringify(LEVELS[currentLevelIndex]));
+        initGrid(levelData);
+
+        // Initialize diamond counting for level completion
+        initialDiamondCount = levelData.objects.filter(obj => obj.type === 'diamond').length;
+        collectedDiamondCount = 0;
+
         createGridMeshes();
         updateCameraPosition();
 
@@ -698,6 +965,26 @@
             window.innerWidth,
             window.innerHeight
           );
+        });
+
+        // Show level selection UI on start
+        showLevelSelectionUI();
+
+        // Handle number key presses for level selection
+        window.addEventListener('keydown', (event) => {
+          // Only process number keys when level selection UI is visible
+          const levelSelectionOverlay = document.getElementById('level-selection-overlay');
+          if (levelSelectionOverlay && levelSelectionOverlay.style.display !== 'none') {
+            const key = event.key;
+            if (key >= '1' && key <= '9') {
+              const levelIndex = parseInt(key) - 1;
+              if (levelIndex >= 0 && levelIndex < LEVELS.length && levelIndex !== currentLevelIndex) {
+                currentLevelIndex = levelIndex;
+                hideLevelSelectionUI();
+                resetLevel();
+              }
+            }
+          }
         });
 
         renderer.setAnimationLoop(animate);
