@@ -1,646 +1,712 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Boulder Dash WebXR - Falling Mechanics Test</title>
-    <!-- Import map for Three.js module resolution -->
-    <script type="importmap">
-      {
-        "imports": {
-          "three": "https://unpkg.com/three@0.162.0/build/three.module.js",
-          "three/addons/": "https://unpkg.com/three@0.162.0/examples/jsm/"
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Boulder Dash WebXR - Fixed</title>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.162.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.162.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: sans-serif;
+    }
+
+    #vr-button {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+    }
+
+    #debug-panel {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 10px;
+      background: rgba(0, 0, 0, 0.75);
+      color: #00ff00;
+      font: 12px monospace;
+      white-space: pre-line;
+      z-index: 20;
+      pointer-events: none;
+    }
+
+    #help {
+      position: absolute;
+      right: 10px;
+      top: 10px;
+      padding: 10px;
+      color: white;
+      background: rgba(0, 0, 0, 0.65);
+      font-size: 13px;
+      line-height: 1.6;
+      z-index: 5;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="vr-button"></div>
+  <div id="debug-panel">Initializing game...</div>
+  <div id="help">
+    WASD: Move<br>
+    Shift + WASD: Dig<br>
+    VR trigger: Interact
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { VRButton } from 'three/addons/webxr/VRButton.js';
+
+    // --------------------------------------------------
+    // LEVEL
+    // --------------------------------------------------
+
+    const LEVEL = {
+      width: 9,
+      height: 9,
+
+      grid: [
+        ["W","W","W","W","W","W","W","W","W"],
+        ["W",".",".",".",".",".",".",".","W"],
+        ["W",".",".",".",".",".",".",".","W"],
+        ["W",".",".",".",".",".",".",".","W"],
+        ["W",".",".",".",".",".",".",".","W"],
+        ["W",".",".",".",".",".",".",".","W"],
+        ["W",".","D","D","D","D","D",".","W"],
+        ["W",".",".",".",".",".",".",".","W"],
+        ["W","W","W","W","W","W","W","W","W"]
+      ],
+
+      objects: [
+        { type: "player", x: 1, y: 1 },
+        { type: "diamond", x: 4, y: 5 },
+        { type: "boulder", x: 2, y: 2 }
+      ]
+    };
+
+    // --------------------------------------------------
+    // CONSTANTS AND STATE
+    // --------------------------------------------------
+
+    const TILE_SIZE = 1;
+    const EMPTY = 0;
+    const DIRT = 1;
+    const WALL = 2;
+
+    const TICK = 0.1;
+
+    let scene;
+    let camera;
+    let renderer;
+
+    let controller1;
+    let controller2;
+    let laser1;
+    let laser2;
+
+    let grid = [];
+    let tiles = [];
+    let gameObjects = [];
+
+    let playerX = 1;
+    let playerZ = 1;
+
+    let accumulator = 0;
+    let lastTime = 0;
+    let frameCount = 0;
+    let errorMessage = null;
+
+    const keys = {
+      w: false,
+      a: false,
+      s: false,
+      d: false,
+      Shift: false
+    };
+
+    const raycaster = new THREE.Raycaster();
+    const tempMatrix = new THREE.Matrix4();
+
+    // --------------------------------------------------
+    // UTILITIES
+    // --------------------------------------------------
+
+    function worldX(x) {
+      return (x - LEVEL.width / 2 + 0.5) * TILE_SIZE;
+    }
+
+    function worldZ(z) {
+      return (z - LEVEL.height / 2 + 0.5) * TILE_SIZE;
+    }
+
+    function showError(error) {
+      errorMessage = String(error?.stack || error);
+
+      const panel = document.getElementById('debug-panel');
+      panel.style.color = '#ff5555';
+      panel.textContent = 'ERROR\n' + errorMessage;
+
+      console.error(error);
+    }
+
+    function objectAt(x, z, type = null) {
+      return gameObjects.find(obj =>
+        obj.x === x &&
+        obj.z === z &&
+        (!type || obj.type === type)
+      );
+    }
+
+    // --------------------------------------------------
+    // GAME OBJECTS
+    // --------------------------------------------------
+
+    function createObject(type, x, z) {
+      let geometry;
+      let material;
+
+      if (type === 'boulder') {
+        geometry = new THREE.SphereGeometry(0.36, 20, 16);
+        material = new THREE.MeshStandardMaterial({
+          color: 0x777777,
+          roughness: 0.9
+        });
+      } else {
+        geometry = new THREE.OctahedronGeometry(0.25);
+        material = new THREE.MeshStandardMaterial({
+          color: 0x00ff66,
+          emissive: 0x003311,
+          metalness: 0.25,
+          roughness: 0.2
+        });
+      }
+
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.position.set(worldX(x), 0, worldZ(z));
+      scene.add(mesh);
+
+      const obj = {
+        type,
+        mesh,
+        x,
+        z,
+        previousX: x,
+        previousZ: z
+      };
+
+      gameObjects.push(obj);
+      return obj;
+    }
+
+    // --------------------------------------------------
+    // GRID
+    // --------------------------------------------------
+
+    function initGrid() {
+      grid = Array.from(
+        { length: LEVEL.height },
+        () => Array(LEVEL.width).fill(EMPTY)
+      );
+
+      tiles = Array.from(
+        { length: LEVEL.height },
+        () => Array(LEVEL.width).fill(null)
+      );
+
+      // Rows are Z; columns are X.
+      for (let z = 0; z < LEVEL.height; z++) {
+        for (let x = 0; x < LEVEL.width; x++) {
+          const cell = LEVEL.grid[z][x];
+
+          grid[z][x] =
+            cell === 'W' ? WALL :
+            cell === 'D' ? DIRT :
+            EMPTY;
         }
       }
-    </script>
-    <style>
-        body { margin: 0; overflow: hidden; }
-        #vr-button {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 10;
+
+      playerX = 1;
+      playerZ = 1;
+
+      for (const obj of LEVEL.objects) {
+        if (obj.type === 'player') {
+          playerX = obj.x;
+          playerZ = obj.y;
+        } else {
+          createObject(obj.type, obj.x, obj.y);
         }
-        #debug-panel {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background: rgba(0,0,0,0.7);
-            color: #0f0;
-            font-family: monospace;
-            font-size: 12pt;
-            padding: 10px;
-            z-index: 1000;
-            pointer-events: none;
+      }
+    }
+
+    function createGridMeshes() {
+      const wallGeometry = new THREE.BoxGeometry(1, 1, 1);
+      const wallMaterial = new THREE.MeshStandardMaterial({
+        color: 0x555555
+      });
+
+      const dirtGeometry = new THREE.BoxGeometry(1, 0.12, 1);
+      const dirtMaterial = new THREE.MeshStandardMaterial({
+        color: 0x8b4513
+      });
+
+      for (let z = 0; z < LEVEL.height; z++) {
+        for (let x = 0; x < LEVEL.width; x++) {
+          let mesh = null;
+
+          if (grid[z][x] === WALL) {
+            mesh = new THREE.Mesh(wallGeometry, wallMaterial);
+            mesh.position.set(worldX(x), 0, worldZ(z));
+          } else if (grid[z][x] === DIRT) {
+            mesh = new THREE.Mesh(dirtGeometry, dirtMaterial);
+            mesh.position.set(worldX(x), -0.44, worldZ(z));
+          }
+
+          if (mesh) {
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+            tiles[z][x] = mesh;
+          }
         }
-    </style>
-</head>
-<body>
-    <button id="vr-button">Enter VR</button>
-    <div id="debug-panel"></div>
+      }
+    }
 
-    <script type="module">
-        // Default level for testing falling mechanics
-        const TEST_FALLING_LEVEL = {
-          "width": 9,
-          "height": 9,
-          "timeLimit": 60,
-          "diamondsRequired": 1,
-          "grid": [
-            ["W","W","W","W","W","W","W","W","W"], // z=0
-            ["W",".",".",".",".",".",".",".","W"], // z=1
-            ["W",".",".","B",".",".",".",".","W"], // z=2 - boulder at (2,2)
-            ["W",".",".",".",".",".",".",".","W"], // z=3
-            ["W",".",".",".",".",".",".",".","W"], // z=4
-            ["W",".",".",".",".",".",".",".","W"], // z=5
-            ["W",".","D","D","D","D","D",".","W"], // z=6 - platform dirt at x=2,3,4,5,6
-            ["W",".",".",".",".",".",".",".","W"], // z=7
-            ["W","W","W","W","W","W","W","W","W"]  // z=8
-          ],
-          "objects": [
-            {"type": "player", "x": 1, "y": 1}, // player at (1,1) - top left
-            {"type": "diamond", "x": 4, "y": 5}, // diamond sitting on platform at (4,5) - will NOT fall
-            {"type": "boulder", "x": 2, "y": 2}   // falling boulder at (2,2) - will fall to (2,5) then stop
-          ]
-        };
+    function removeDirt(x, z) {
+      if (grid[z][x] !== DIRT) return;
 
-        // Default level
-        const DEFAULT_LEVEL = {
-          "width": 10,
-          "height": 10,
-          "timeLimit": 180,
-          "diamondsRequired": 3,
-          "grid": [
-            ["W","W","W","W","W","W","W","W","W","W"],
-            ["W","D","D","D","D","D","D","D","D","W"],
-            ["W","D","D","D","D","D","D","D","D","W"],
-            ["W","D","D","D","D","D","D","D","D","W"],
-            ["W","D","D","D","D","D","D","D","D","W"],
-            ["W","D","D","D","D","D","D","D","D","W"],
-            ["W","D","D","D","D","D","D","D","D","W"],
-            ["W","D","D","D","D","D","D","D","D","W"],
-            ["W","D","D","D","D","D","D","D","D","W"],
-            ["W","W","W","W","W","W","W","W","W","W"]
-          ],
-          "objects": [
-            {"type": "player", "x": 1, "y": 1},
-            {"type": "diamond", "x": 5, "y": 5},
-            {"type": "boulder", "x": 3, "y": 3}
-          ]
-        };
+      if (tiles[z][x]) {
+        scene.remove(tiles[z][x]);
+        tiles[z][x] = null;
+      }
 
-        // Basic Three.js setup
-        let scene, camera, renderer;
-        let controller1, controller2;
-        let controllerGrip1, controllerGrip2;
+      grid[z][x] = EMPTY;
+    }
 
-        // Grid settings
-        const TILE_SIZE = 1;
-        let GRID_SIZE; // will be set by the level
-        let HALF_GRID; // will be set by the level
-        let tiles = []; // 2D array of meshes
-        let tilePresent = []; // 2D boolean array indicating if tile is present (for backward compatibility with laser)
-        let playerGridX = 1, playerGridZ = 1; // player's grid position
-        let gameObjects = []; // array to hold boulders and diamonds with logic and rendering properties
+    // --------------------------------------------------
+    // PLAYER
+    // --------------------------------------------------
 
-        // Tile types
-        const TILE_EMPTY = 0;
-        const TILE_DIRT = 1;
-        const TILE_WALL = 2;
-        let grid = []; // 2D array of tile types
+    function updateCameraPosition() {
+      // Third-person view looking toward the board.
+      camera.position.set(
+        worldX(playerX),
+        5.5,
+        worldZ(playerZ) + 6
+      );
 
-        // Object types
-        const OBJECT_PLAYER = 'player';
-        const OBJECT_BOULDER = 'boulder';
-        const OBJECT_DIAMOND = 'diamond';
+      camera.lookAt(
+        worldX(playerX),
+        0,
+        worldZ(playerZ)
+      );
+    }
 
-        // Logic tick
-        const LOGIC_TICK = 1/10; // 10 ticks per second in seconds
-        let lastLogicTime = 0;
-        let lag = 0;
+    function movePlayer(dx, dz) {
+      const x = playerX + dx;
+      const z = playerZ + dz;
 
-        // Debug panel variables
-        let debugError = null;
-        let frameCount = 0;
-        const tempMatrix = new THREE.Matrix4();
-        const raycaster = new THREE.Raycaster();
-        let updateLaserFn;
+      if (
+        x < 0 || x >= LEVEL.width ||
+        z < 0 || z >= LEVEL.height
+      ) return;
 
-        function showErrorInPanel(message) {
-            debugError = message;
-            const panel = document.getElementById('debug-panel');
-            if (panel) {
-                panel.style.color = '#f00';
-                panel.textContent = message;
-            } else {
-                console.error(message);
-            }
+      if (grid[z][x] === WALL) return;
+
+      // Boulder blocks movement.
+      if (objectAt(x, z, 'boulder')) return;
+
+      // Collect diamonds.
+      const diamond = objectAt(x, z, 'diamond');
+
+      if (diamond) {
+        scene.remove(diamond.mesh);
+        gameObjects = gameObjects.filter(obj => obj !== diamond);
+      }
+
+      // Walking through dirt digs it automatically.
+      removeDirt(x, z);
+
+      playerX = x;
+      playerZ = z;
+
+      updateCameraPosition();
+    }
+
+    function digAdjacent(dx, dz) {
+      const x = playerX + dx;
+      const z = playerZ + dz;
+
+      if (
+        x < 0 || x >= LEVEL.width ||
+        z < 0 || z >= LEVEL.height
+      ) return;
+
+      if (objectAt(x, z)) return;
+
+      removeDirt(x, z);
+    }
+
+    // --------------------------------------------------
+    // KEYBOARD
+    // --------------------------------------------------
+
+    function onKeyDown(event) {
+      const keyMap = {
+        KeyW: 'w',
+        KeyA: 'a',
+        KeyS: 's',
+        KeyD: 'd',
+        ShiftLeft: 'Shift',
+        ShiftRight: 'Shift'
+      };
+
+      const key = keyMap[event.code];
+      if (!key) return;
+
+      event.preventDefault();
+
+      // Avoid moving repeatedly from key-repeat events.
+      if (keys[key]) return;
+
+      keys[key] = true;
+
+      if (key === 'Shift') return;
+
+      const directions = {
+        w: [0, -1],
+        s: [0, 1],
+        a: [-1, 0],
+        d: [1, 0]
+      };
+
+      const [dx, dz] = directions[key];
+
+      if (keys.Shift) {
+        digAdjacent(dx, dz);
+      } else {
+        movePlayer(dx, dz);
+      }
+    }
+
+    function onKeyUp(event) {
+      const keyMap = {
+        KeyW: 'w',
+        KeyA: 'a',
+        KeyS: 's',
+        KeyD: 'd',
+        ShiftLeft: 'Shift',
+        ShiftRight: 'Shift'
+      };
+
+      const key = keyMap[event.code];
+
+      if (key) keys[key] = false;
+    }
+
+    // --------------------------------------------------
+    // BOULDER GRAVITY
+    // --------------------------------------------------
+
+    function updateLogic() {
+      for (const obj of gameObjects) {
+        obj.previousX = obj.x;
+        obj.previousZ = obj.z;
+      }
+
+      // Reverse order prevents lower boulders being updated
+      // before upper boulders in the same tick.
+      const boulders = gameObjects
+        .filter(obj => obj.type === 'boulder')
+        .sort((a, b) => a.z - b.z);  // FIXED: was b.z - a.z, now a.z - b.z (ascending z)
+
+      for (const boulder of boulders) {
+        const x = boulder.x;
+        const belowZ = boulder.z + 1;
+
+        if (belowZ >= LEVEL.height) continue;
+
+        // Stop on walls or dirt.
+        if (grid[belowZ][x] !== EMPTY) continue;
+
+        // Stop above another object or the player.
+        if (objectAt(x, belowZ)) continue;
+
+        if (playerX === x && playerZ === belowZ) continue;
+
+        boulder.z = belowZ;
+      }
+    }
+
+    // --------------------------------------------------
+    // VR CONTROLLERS AND LASERS
+    // --------------------------------------------------
+
+    function createLaser(controller) {
+      const geometry = new THREE.CylinderGeometry(
+        0.003, 0.003, 1, 8
+      );
+
+      geometry.rotateX(Math.PI / 2);
+
+      const material = new THREE.MeshBasicMaterial({
+        color: 0xff3333
+      });
+
+      const laser = new THREE.Mesh(geometry, material);
+
+      laser.position.z = -0.5;
+      laser.scale.z = 5;
+      laser.visible = false;
+
+      controller.add(laser);
+      return laser;
+    }
+
+    function onSelectStart(event) {
+      const controller = event.target;
+      const laser = controller === controller1 ? laser1 : laser2;
+
+      if (laser) laser.visible = true;
+
+      tempMatrix.identity().extractRotation(controller.matrixWorld);
+
+      raycaster.ray.origin.setFromMatrixPosition(
+        controller.matrixWorld
+      );
+
+      raycaster.ray.direction
+        .set(0, 0, -1)
+        .applyMatrix4(tempMatrix);
+
+      const targets = gameObjects.map(obj => obj.mesh);
+      const hits = raycaster.intersectObjects(targets, false);
+
+      if (hits.length > 0) {
+        const hitObject = gameObjects.find(
+          obj => obj.mesh === hits[0].object
+        );
+
+        if (hitObject?.type === 'diamond') {
+          hitObject.mesh.material.color.set(0xff0000);
         }
+      }
+    }
 
-        function updateDebugPanel() {
-            if (debugError !== null) {
-                return;
-            }
-            const panel = document.getElementById('debug-panel');
-            if (!panel) {
-                return;
-            }
-            panel.style.color = '#0f0';
-            let info = [];
-            info.push('Three.js: ' + (THREE.REVISION || 'unknown'));
-            const cam = camera.position;
-            info.push('Camera: (' +
-                Math.round(cam.x * 100) / 100 + ', ' +
-                Math.round(cam.y * 100) / 100 + ', ' +
-                Math.round(cam.z * 100) / 100 + ')');
-            info.push('Player Grid: (' + playerGridX + ', ' + playerGridZ + ')');
-            info.push('VR Presenting: ' + (renderer.xr.isPresenting ? 'yes' : 'no'));
-            // Count non-null tiles
-            let tileCount = 0;
-            for (let i = 0; i < GRID_SIZE; i++) {
-                for (let j = 0; j < GRID_SIZE; j++) {
-                    if (tiles[i][j] !== null) {
-                        tileCount++;
-                    }
-                }
-            }
-            info.push('Tiles: ' + tileCount);
-            info.push('Frame: ' + frameCount);
-            panel.textContent = info.join('\n');
+    function onSelectEnd(event) {
+      const controller = event.target;
+      const laser = controller === controller1 ? laser1 : laser2;
+
+      if (laser) laser.visible = false;
+
+      for (const obj of gameObjects) {
+        if (obj.type === 'diamond') {
+          obj.mesh.material.color.set(0x00ff66);
         }
+      }
+    }
 
-        function init() {
-            try {
-                // Scene
-                scene = new THREE.Scene();
-                scene.background = new THREE.Color(0x87CEEB);
+    function updateLaser(controller, laser) {
+      if (!controller || !laser || !laser.visible) return;
 
-                // Camera
-                camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+      tempMatrix.identity().extractRotation(controller.matrixWorld);
 
-                // Initialize grid with test level: walls around edges, dirt inside
-                initGrid(TEST_FALLING_LEVEL);
+      raycaster.ray.origin.setFromMatrixPosition(
+        controller.matrixWorld
+      );
 
-                // Create grid meshes
-                createGridMeshes();
+      raycaster.ray.direction
+        .set(0, 0, -1)
+        .applyMatrix4(tempMatrix);
 
-                // Set initial camera position after grid is initialized
-                updateCameraPosition();
+      const targets = gameObjects.map(obj => obj.mesh);
 
-
-                // Lights
-                const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
-                hemiLight.position.set(0, 20, 0);
-                scene.add(hemiLight);
-
-                const dirLight = new THREE.DirectionalLight(0xffffff);
-                dirLight.position.set(- 3, 10, - 10);
-                dirLight.castShadow = true;
-                dirLight.shadow.camera.top = 2;
-                dirLight.shadow.camera.bottom = - 2;
-                dirLight.shadow.camera.left = - 2;
-                dirLight.shadow.camera.right = 2;
-                dirLight.shadow.camera.near = 0.1;
-                dirLight.shadow.camera.far = 40;
-                scene.add(dirLight);
-
-                // Renderer
-                renderer = new THREE.WebGLRenderer({ antialias: true });
-                renderer.setPixelRatio(window.devicePixelRatio);
-                renderer.setSize(window.innerWidth, window.innerHeight);
-                renderer.outputEncoding = THREE.sRGBEncoding;
-                renderer.shadowMap.enabled = true;
-                document.body.appendChild(renderer.domElement);
-                renderer.domElement.style.border = '2px solid red';
-
-                // VR Button
-                const vrButton = VRButton.createButton(renderer, {
-                    optionalFeatures: ['local-floor', 'bounded-floor', 'layers']
-                });
-                document.getElementById('vr-button').appendChild(vrButton);
-
-                // Controllers
-                controller1 = renderer.xr.getController(0);
-                controller1.addEventListener('selectstart', onSelectStart);
-                controller1.addEventListener('selectend', onSelectEnd);
-                scene.add(controller1);
-
-                controller2 = renderer.xr.getController(1);
-                controller2.addEventListener('selectstart', onSelectStart);
-                controller2.addEventListener('selectend', onSelectEnd);
-                scene.add(controller2);
-
-                // Controller grips
-                controllerGrip1 = renderer.xr.getControllerGrip(0);
-                controllerGrip1.add(controller1);
-                scene.add(controllerGrip1);
-
-                controllerGrip2 = renderer.xr.getControllerGrip(1);
-                controllerGrip2.add(controller2);
-                scene.add(controllerGrip2);
-
-                // Raycaster for laser pointer
-                const laserGeometry = new THREE.CylinderGeometry(0.002, 0.002, 5, 12).rotateX(Math.PI / 2);
-                const laserMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-
-                function createLaserMesh() {
-                    const mesh = new THREE.Mesh(laserGeometry, laserMaterial);
-                    mesh.visible = false;
-                    return mesh;
-                }
-
-                const laser1 = createLaserMesh();
-                controller1.add(laser1);
-
-                const laser2 = createLaserMesh();
-                controller2.add(laser2);
-
-                // Temporary objects for intersection test
-
-                function onSelectStart(event) {
-                    const controller = event.target;
-                    const index = controller.userData.index;
-
-                    const laser = controller.children.find(child => child.isMesh && child.material.color.getHex() === 0xff0000);
-                    if (laser) {
-                        laser.visible = true;
-                    }
-
-                    // Find the first diamond in gameObjects for intersection test
-                    let diamondObj = null;
-                    for (const obj of gameObjects) {
-                        // Assuming we can identify diamonds by their color or type
-                        // For now, we'll use the first object we find (should be the diamond in our test level)
-                        if (obj.mesh) {
-                            diamondObj = obj.mesh;
-                            break;
-                        }
-                    }
-
-                    tempMatrix.identity().extractRotation(controller.matrixWorld);
-                    raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
-                    raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
-
-                    let intersects = [];
-                    if (diamondObj) {
-                        intersects = raycaster.intersectObject(diamondObj);
-                    }
-                    if (intersects.length > 0 && diamondObj) {
-                        // Change diamond color on select
-                        diamondObj.material.color.set(0xff0000);
-                    }
-                }
-
-                function onSelectEnd(event) {
-                    const controller = event.target;
-                    const laser = controller.children.find(child => child.isMesh && child.material.color.getHex() === 0xff0000);
-                    if (laser) {
-                        laser.visible = false;
-                    }
-
-                    // Reset diamond color - find the first diamond in gameObjects
-                    let diamondObj = null;
-                    for (const obj of gameObjects) {
-                        if (obj.mesh) {
-                            diamondObj = obj.mesh;
-                            break;
-                        }
-                    }
-                    if (diamondObj) {
-                        diamondObj.material.color.set(0x00ff00);
-                    }
-                }
-
-                // Update laser length based on intersection
-                function updateLaser(controller) {
-                    const laser = controller.children.find(child => child.isMesh && child.material.color.getHex() === 0xff0000);
-                    if (laser) {
-                        // Scale the laser to match the distance to the first intersected object (diamond or tiles) or max 5 meters
-                        tempMatrix.identity().extractRotation(controller.matrixWorld);
-                        raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
-                        raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
-
-                        // We'll intersect with the gameObjects meshes and the tiles
-                        const objects = [];
-                        // Add meshes from gameObjects
-                        for (const obj of gameObjects) {
-                            if (obj.mesh) {
-                                objects.push(obj.mesh);
-                            }
-                        }
-                        // Add tiles
-                        for (let i = 0; i < GRID_SIZE; i++) {
-                            for (let j = 0; j < GRID_SIZE; j++) {
-                                if (tilePresent[i][j]) {
-                                    objects.push(tiles[i][j]);
-                                }
-                            }
-                        }
-
-                        const intersects = raycaster.intersectObjects(objects);
-                        if (intersects.length > 0) {
-                            const distance = intersects[0].distance;
-                            laser.scale.z = distance;
-                        } else {
-                            laser.scale.z = 5; // default length
-                        }
-                    }
-                }
-                updateLaserFn = updateLaser;
-
-                // Keyboard event listeners
-                window.addEventListener('keydown', onKeyDown);
-                window.addEventListener('keyup', onKeyUp);
-
-                // Handle window resize
-                window.addEventListener('resize', onWindowResize, false);
-            } catch (error) {
-                showErrorInPanel('Error in init: ' + error.message);
-            }
+      for (const row of tiles) {
+        for (const tile of row) {
+          if (tile) targets.push(tile);
         }
+      }
 
-        function initGrid(levelJson) {
-            // Set GRID_SIZE and HALF_GRID from the level (assuming square level)
-            GRID_SIZE = levelJson.width;
-            HALF_GRID = (GRID_SIZE * TILE_SIZE) / 2;
+      const hits = raycaster.intersectObjects(targets, false);
+      const distance = hits.length
+        ? Math.min(hits[0].distance, 5)
+        : 5;
 
-            // Initialize the 2D grid arrays
-            grid = new Array(GRID_SIZE);
-            tilePresent = new Array(GRID_SIZE);
-            for (let i = 0; i < GRID_SIZE; i++) {
-                grid[i] = new Array(GRID_SIZE);
-                tilePresent[i] = new Array(GRID_SIZE);
-                for (let j = 0; j < GRID_SIZE; j++) {
-                    const cell = levelJson.grid[i][j];
-                    if (cell === 'W') {
-                        grid[i][j] = TILE_WALL;
-                    } else if (cell === 'D') {
-                        grid[i][j] = TILE_DIRT;
-                    } else if (cell === ' ') {
-                        grid[i][j] = TILE_EMPTY;
-                    } else {
-                        // Default to empty if unknown character
-                        grid[i][j] = TILE_EMPTY;
-                    }
-                    // Tile is present if it's a wall or dirt (i.e., not empty)
-                    tilePresent[i][j] = (grid[i][j] === TILE_WALL || grid[i][j] === TILE_DIRT);
-                }
-            }
+      laser.scale.z = distance;
+      laser.position.z = -distance / 2;
+    }
 
-            // Reset gameObjects array and create objects from the level
-            gameObjects.forEach(obj => {
-                if (obj.mesh) {
-                    scene.remove(obj.mesh);
-                }
-            }); // remove any existing objects
-            gameObjects = [];
+    // --------------------------------------------------
+    // DEBUG PANEL
+    // --------------------------------------------------
 
-            // Set default player start position
-            let playerStartFound = false;
-            if (levelJson.objects) {
-                for (const obj of levelJson.objects) {
-                    if (obj.type === "player") {
-                        playerGridX = obj.x;
-                        playerGridZ = obj.y;
-                        playerStartFound = true;
-                    } else if (obj.type === "diamond") {
-                        // Create a diamond mesh
-                        const diamondGeometry = new THREE.OctahedronGeometry(0.2, 0);
-                        const diamondMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
-                        const diamondMesh = new THREE.Mesh(diamondGeometry, diamondMaterial);
-                        // Place the diamond at the center of the cell (x, y, z) in world coordinates
-                        const worldX = (obj.x - GRID_SIZE/2 + 0.5) * TILE_SIZE;
-                        const worldY = TILE_SIZE/2; // half a tile up to sit on the ground
-                        const worldZ = (obj.y - GRID_SIZE/2 + 0.5) * TILE_SIZE;
-                        diamondMesh.position.set(worldX, worldY, worldZ);
-                        diamondMesh.castShadow = true;
-                        diamondMesh.receiveShadow = true;
-                        scene.add(diamondMesh);
-                        gameObjects.push({
-                            mesh: diamondMesh,
-                            type: OBJECT_DIAMOND,
-                            gridX: obj.x,
-                            gridZ: obj.y,
-                            lastGridX: obj.x,
-                            lastGridZ: obj.y,
-                            canFall: false // diamonds do not fall
-                        });
-                    }
-                    // Add other object types as needed
-                }
-            }
+    function updateDebugPanel() {
+      if (errorMessage) return;
 
-            // If no player object found, use default (1,1)
-            if (!playerStartFound) {
-                playerGridX = 1;
-                playerGridZ = 1;
-            }
+      const panel = document.getElementById('debug-panel');
+
+      panel.textContent =
+        `Three.js: ${THREE.REVISION}\n` +
+        `Player: (${playerX}, ${playerZ})\n` +
+        `Objects: ${gameObjects.length}\n` +
+        `Boulders: ${gameObjects.filter(o => o.type === 'boulder').length}\n` +
+        `VR active: ${renderer.xr.isPresenting}\n` +
+        `Frame: ${frameCount}`;
+    }
+
+    // --------------------------------------------------
+    // ANIMATION LOOP
+    // --------------------------------------------------
+
+    function animate(timeMs) {
+      try {
+        const time = timeMs / 1000;
+
+        if (lastTime === 0) lastTime = time;
+
+        const delta = Math.min(time - lastTime, 0.25);
+        lastTime = time;
+        accumulator += delta;
+
+        while (accumulator >= TICK) {
+          updateLogic();
+          accumulator -= TICK;
         }
 
-        function createGridMeshes() {
-            const geometry_dirt = new THREE.PlaneGeometry(TILE_SIZE, TILE_SIZE);
-            const material_dirt = new THREE.MeshStandardMaterial({ color: 0x8b4513 }); // saddle brown
-        material_dirt.side = THREE.DoubleSide;
+        const alpha = accumulator / TICK;
 
-            const geometry_wall = new THREE.BoxGeometry(TILE_SIZE, TILE_SIZE, TILE_SIZE);
-            const material_wall = new THREE.MeshStandardMaterial({ color: 0x555555 }); // dark gray
+        for (const obj of gameObjects) {
+          const x = obj.previousX +
+            (obj.x - obj.previousX) * alpha;
 
-            for (let i = 0; i < GRID_SIZE; i++) {
-                tiles[i] = new Array(GRID_SIZE);
-                for (let j = 0; j < GRID_SIZE; j++) {
-                    let mesh;
-                    if (grid[i][j] === TILE_WALL) {
-                        mesh = new THREE.Mesh(geometry_wall, material_wall);
-                        mesh.position.set(
-                            (i - GRID_SIZE/2 + 0.5) * TILE_SIZE, // x
-                            0, // y (centered vertically)
-                            (j - GRID_SIZE/2 + 0.5) * TILE_SIZE  // z
-                        );
-                    } else if (grid[i][j] === TILE_DIRT) {
-                        mesh = new THREE.Mesh(geometry_dirt, material_dirt);
-                        mesh.rotation.x = -Math.PI / 2; // rotate to be horizontal
-                        mesh.position.set(
-                            (i - GRID_SIZE/2 + 0.5) * TILE_SIZE, // x
-                            -TILE_SIZE/2 + 0.01, // y (just above the ground to avoid z-fighting)
-                            (j - GRID_SIZE/2 + 0.5) * TILE_SIZE  // z
-                        );
-                    } else {
-                        // TILE_EMPTY: no mesh
-                        tiles[i][j] = null;
-                        continue;
-                    }
-                    mesh.receiveShadow = true;
-                    mesh.castShadow = true;
-                    scene.add(mesh);
-                    tiles[i][j] = mesh;
-                }
-            }
+          const z = obj.previousZ +
+            (obj.z - obj.previousZ) * alpha;
+
+          obj.mesh.position.set(
+            worldX(x),
+            0,
+            worldZ(z)
+          );
         }
 
-        function onKeyDown(event) {
-            switch (event.code) {
-                case 'KeyW':
-                    keys.w = true;
-                    break;
-                case 'KeyA':
-                    keys.a = true;
-                    break;
-                case 'KeyS':
-                    keys.s = true;
-                    break;
-                case 'KeyD':
-                    keys.d = true;
-                    break;
-                case 'ShiftLeft':
-                case 'ShiftRight':
-                    keys.Shift = true;
-                    break;
-            }
-            handleKeys();
-        }
+        updateLaser(controller1, laser1);
+        updateLaser(controller2, laser2);
 
-        function onKeyUp(event) {
-            switch (event.code) {
-                case 'KeyW':
-                    keys.w = false;
-                    break;
-                case 'KeyA':
-                    keys.a = false;
-                    break;
-                case 'KeyS':
-                    keys.s = false;
-                    break;
-                case 'KeyD':
-                    keys.d = false;
-                    break;
-                case 'ShiftLeft':
-                case 'ShiftRight':
-                    keys.Shift = false;
-                    break;
-            }
-            handleKeys();
-        }
+        renderer.render(scene, camera);
 
-        function handleKeys() {
-            // Check for movement keys (without Shift)
-            if (!keys.Shift) {
-                if (keys.w) movePlayer(0, -1); // forward (negative z)
-                if (keys.s) movePlayer(0, 1);  // backward (positive z)
-                if (keys.a) movePlayer(-1, 0); // left (negative x)
-                if (keys.d) movePlayer(1, 0);  // right (positive x)
-            }
-            // Check for digging keys (with Shift)
-            else {
-                if (keys.w) digAdjacent(0, -1);
-                if (keys.s) digAdjacent(0, 1);
-                if (keys.a) digAdjacent(-1, 0);
-                if (keys.d) digAdjacent(1, 0);
-            }
-        }
+        frameCount++;
+        updateDebugPanel();
+      } catch (error) {
+        showError(error);
+      }
+    }
 
-        function movePlayer(dx, dz) {
-            const newX = playerGridX + dx;
-            const newZ = playerGridZ + dz;
-            // Check bounds and if the tile is not a wall and not occupied by a boulder
-            if (newX >= 0 && newX < GRID_SIZE && newZ >= 0 && newZ < GRID_SIZE) {
-                if (grid[newX][newZ] !== TILE_WALL) {
-                    // Check for boulder at the target cell
-                    let boulderHere = false;
-                    for (const obj of gameObjects) {
-                        if (obj.type === OBJECT_BOULDER && obj.gridX === newX && obj.gridZ === newZ) {
-                            boulderHere = true;
-                            break;
-                        }
-                    }
-                    if (!boulderHere) {
-                        playerGridX = newX;
-                        playerGridZ = newZ;
-                        updateCameraPosition();
-                    }
-                }
-            }
-        }
+    // --------------------------------------------------
+    // INITIALIZATION
+    // --------------------------------------------------
 
-        function digAdjacent(dx, dz) {
-            const targetX = playerGridX + dx;
-            const targetZ = playerGridZ + dz;
-            // Check bounds and if the tile is dirt and not occupied by a boulder
-            if (targetX >= 0 && targetX < GRID_SIZE && targetZ >= 0 && targetZ < GRID_SIZE) {
-                if (grid[targetX][targetZ] === TILE_DIRT) {
-                    // Check for boulder at the target cell
-                    let boulderHere = false;
-                    for (const obj of gameObjects) {
-                        if (obj.type === OBJECT_BOULDER && obj.gridX === targetX && obj.gridZ === targetZ) {
-                            boulderHere = true;
-                            break;
-                        }
-                    }
-                    if (!boulderHere) {
-                        // Remove the tile from the scene
-                        scene.remove(tiles[targetX][targetZ]);
-                        tiles[targetX][targetZ] = null;
-                        grid[targetX][targetZ] = TILE_EMPTY;
-                        tilePresent[targetX][targetZ] = false; // update for laser intersection
-                    }
-                }
-            }
-        }
+    function init() {
+      try {
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87ceeb);
 
-        function updateCameraPosition() {
-            // Convert grid position to world position (center of tile)
-            const worldX = (playerGridX - GRID_SIZE/2 + 0.5) * TILE_SIZE;
-            const worldZ = (playerGridZ - GRID_SIZE/2 + 0.5) * TILE_SIZE;
-            camera.position.set(worldX, 1.6, worldZ);
-            camera.lookAt(worldX, 0, worldZ); // look straight down at the tile
-        }
+        camera = new THREE.PerspectiveCamera(
+          50,
+          window.innerWidth / window.innerHeight,
+          0.1,
+          100
+        );
 
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
+        initGrid();
+        createGridMeshes();
+        updateCameraPosition();
 
-        function animate(time) {
-            time = time * 0.001; // convert to seconds
-            const deltaTime = time - lastLogicTime;
-            lastLogicTime = time;
-            lag += deltaTime;
-            while (lag >= LOGIC_TICK) {
-                updateLogic();
-                lag -= LOGIC_TICK;
-            }
-            render(Math.min(lag / LOGIC_TICK, 1)); // alpha for interpolation
+        const hemisphereLight = new THREE.HemisphereLight(
+          0xffffff, 0x444444, 1.5
+        );
+        scene.add(hemisphereLight);
 
-            requestAnimationFrame(animate);
-        }
+        const directionalLight = new THREE.DirectionalLight(
+          0xffffff, 2
+        );
 
-        function render(alpha) {
-            try {
-                updateLaserFn(controller1);
-                updateLaserFn(controller2);
+        directionalLight.position.set(-3, 10, -10);
+        directionalLight.castShadow = true;
+        scene.add(directionalLight);
 
-                // Interpolate the position of each game object (boulders and diamonds)
-                for (const obj of gameObjects) {
-                    const interpX = obj.lastGridX + (obj.gridX - obj.lastGridX) * alpha;
-                    const interpZ = obj.lastGridZ + (obj.gridZ - obj.lastGridZ) * alpha;
-                    const worldX = (interpX - GRID_SIZE/2 + 0.5) * TILE_SIZE;
-                    const worldZ = (interpZ - GRID_SIZE/2 + 0.5) * TILE_SIZE;
-                    const worldY = TILE_SIZE/2; // keep y constant (half a tile up)
-                    obj.mesh.position.set(worldX, worldY, worldZ);
-                }
+        renderer = new THREE.WebGLRenderer({
+          antialias: true
+        });
 
-                renderer.render(scene, camera);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(
+          window.innerWidth,
+          window.innerHeight
+        );
 
-                frameCount++;
-                updateDebugPanel();
-            } catch (error) {
-                showErrorInPanel('Error in render: ' + error.message);
-            }
-        }
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        renderer.shadowMap.enabled = true;
 
-        init();
-        animate();
-    </script>
+        document.body.appendChild(renderer.domElement);
+
+        document.getElementById('vr-button').appendChild(
+          VRButton.createButton(renderer, {
+            optionalFeatures: ['local-floor', 'bounded-floor']
+          })
+        );
+
+        controller1 = renderer.xr.getController(0);
+        controller1.addEventListener('selectstart', onSelectStart);
+        controller1.addEventListener('selectend', onSelectEnd);
+        scene.add(controller1);
+
+        controller2 = renderer.xr.getController(1);
+        controller2.addEventListener('selectstart', onSelectStart);
+        controller2.addEventListener('selectend', onSelectEnd);
+        scene.add(controller2);
+
+        laser1 = createLaser(controller1);
+        laser2 = createLaser(controller2);
+
+        window.addEventListener('keydown', onKeyDown);
+        window.addEventListener('keyup', onKeyUp);
+
+        window.addEventListener('blur', () => {
+          for (const key in keys) keys[key] = false;
+        });
+
+        window.addEventListener('resize', () => {
+          camera.aspect =
+            window.innerWidth / window.innerHeight;
+
+          camera.updateProjectionMatrix();
+
+          renderer.setSize(
+            window.innerWidth,
+            window.innerHeight
+          );
+        });
+
+        renderer.setAnimationLoop(animate);
+      } catch (error) {
+        showError(error);
+      }
+    }
+
+    init();
+  </script>
 </body>
 </html>
