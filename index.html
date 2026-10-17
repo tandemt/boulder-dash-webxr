@@ -295,15 +295,28 @@
                         laser.visible = true;
                     }
 
-                    // Intersection test with the diamond (we can also test with tiles if needed)
+                    // Find the first diamond in gameObjects for intersection test
+                    let diamondObj = null;
+                    for (const obj of gameObjects) {
+                        // Assuming we can identify diamonds by their color or type
+                        // For now, we'll use the first object we find (should be the diamond in our test level)
+                        if (obj.mesh) {
+                            diamondObj = obj.mesh;
+                            break;
+                        }
+                    }
+
                     tempMatrix.identity().extractRotation(controller.matrixWorld);
                     raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
                     raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
 
-                    const intersects = raycaster.intersectObject(diamond);
-                    if (intersects.length > 0) {
+                    let intersects = [];
+                    if (diamondObj) {
+                        intersects = raycaster.intersectObject(diamondObj);
+                    }
+                    if (intersects.length > 0 && diamondObj) {
                         // Change diamond color on select
-                        diamond.material.color.set(0xff0000);
+                        diamondObj.material.color.set(0xff0000);
                     }
                 }
 
@@ -314,8 +327,17 @@
                         laser.visible = false;
                     }
 
-                    // Reset diamond color
-                    diamond.material.color.set(0x00ff00);
+                    // Reset diamond color - find the first diamond in gameObjects
+                    let diamondObj = null;
+                    for (const obj of gameObjects) {
+                        if (obj.mesh) {
+                            diamondObj = obj.mesh;
+                            break;
+                        }
+                    }
+                    if (diamondObj) {
+                        diamondObj.material.color.set(0x00ff00);
+                    }
                 }
 
                 // Update laser length based on intersection
@@ -327,8 +349,15 @@
                         raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
                         raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
 
-                        // We'll intersect with the gameObjects and the tiles
-                        const objects = [...gameObjects];
+                        // We'll intersect with the gameObjects meshes and the tiles
+                        const objects = [];
+                        // Add meshes from gameObjects
+                        for (const obj of gameObjects) {
+                            if (obj.mesh) {
+                                objects.push(obj.mesh);
+                            }
+                        }
+                        // Add tiles
                         for (let i = 0; i < GRID_SIZE; i++) {
                             for (let j = 0; j < GRID_SIZE; j++) {
                                 if (tilePresent[i][j]) {
@@ -418,10 +447,34 @@
                         scene.add(diamondMesh);
                         gameObjects.push({
                             mesh: diamondMesh,
+                            type: OBJECT_DIAMOND,
                             gridX: obj.x,
                             gridZ: obj.y,
                             lastGridX: obj.x,
-                            lastGridZ: obj.y
+                            lastGridZ: obj.y,
+                            canFall: false // diamonds do not fall
+                        });
+                    } else if (obj.type === "boulder") {
+                        // Create a boulder mesh
+                        const boulderGeometry = new THREE.BoxGeometry(TILE_SIZE * 0.6, TILE_SIZE * 0.6, TILE_SIZE * 0.6);
+                        const boulderMaterial = new THREE.MeshStandardMaterial({ color: 0x8b4513 }); // saddle brown
+                        const boulderMesh = new THREE.Mesh(boulderGeometry, boulderMaterial);
+                        // Place the boulder at the center of the cell (x, y, z) in world coordinates
+                        const worldX = (obj.x - GRID_SIZE/2 + 0.5) * TILE_SIZE;
+                        const worldY = TILE_SIZE/2; // half a tile up to sit on the ground
+                        const worldZ = (obj.y - GRID_SIZE/2 + 0.5) * TILE_SIZE;
+                        boulderMesh.position.set(worldX, worldY, worldZ);
+                        boulderMesh.castShadow = true;
+                        boulderMesh.receiveShadow = true;
+                        scene.add(boulderMesh);
+                        gameObjects.push({
+                            mesh: boulderMesh,
+                            type: OBJECT_BOULDER,
+                            gridX: obj.x,
+                            gridZ: obj.y,
+                            lastGridX: obj.x,
+                            lastGridZ: obj.y,
+                            canFall: true // boulders can fall
                         });
                     }
                     // Add other object types as needed
