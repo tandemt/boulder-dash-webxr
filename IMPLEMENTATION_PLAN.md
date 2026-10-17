@@ -77,7 +77,7 @@
     - Add animated player model with walking/idle states
     - Implement sprite sheet or keyframe animation system
     - Add animation transitions based on player state (moving, digging, idle)
-    - PENDING
+    - ✅ COMPLETED
 
 ## Future Milestones
 

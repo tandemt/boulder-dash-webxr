@@ -199,6 +199,12 @@
     let lastTime = 0;
     let frameCount = 0;
     let errorMessage = null;
+    let playerObject = null;
+    let isDigging = false;
+    let diggingTimer = 0;
+    const digDuration = 0.2; // seconds
+    let lastMoveDir = {x: 0, z: 0};
+    let playerJustMoved = false;
 
     const keys = {
       w: false,
@@ -248,6 +254,7 @@
     function createObject(type, x, z) {
       let geometry;
       let material;
+      let mesh;
 
       if (type === 'boulder') {
         geometry = new THREE.SphereGeometry(0.36, 20, 16);
@@ -255,7 +262,77 @@
           color: 0x777777,
           roughness: 0.9
         });
+        mesh = new THREE.Mesh(geometry, material);
+      } else if (type === 'player') {
+        // Create a group for the player
+        mesh = new THREE.Group();
+
+        const bodyHeight = 0.8;
+        const bodyRadius = 0.2;
+        const bodyGeometry = new THREE.CylinderGeometry(bodyRadius, bodyRadius, bodyHeight, 8);
+        const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
+        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+        body.position.y = bodyHeight / 2; // so bottom at y=0
+        body.castShadow = true;
+        body.receiveShadow = true;
+        mesh.add(body);
+
+        const headRadius = 0.2;
+        const headGeometry = new THREE.SphereGeometry(headRadius, 8, 8);
+        const headMaterial = new THREE.MeshStandardMaterial({ color: 0xffcc00 });
+        const head = new THREE.Mesh(headGeometry, headMaterial);
+        head.position.y = bodyHeight + headRadius; // on top of body
+        head.castShadow = true;
+        head.receiveShadow = true;
+        mesh.add(head);
+
+        const armWidth = 0.1, armHeight = 0.3, armDepth = 0.1;
+        const armGeometry = new THREE.BoxGeometry(armWidth, armHeight, armDepth);
+        const armMaterial = new THREE.MeshStandardMaterial({ color: 0xffcc00 });
+
+        const leftArm = new THREE.Mesh(armGeometry, armMaterial);
+        leftArm.position.set(-bodyRadius - armWidth/2, bodyHeight/2, 0); // left side, at mid-body height
+        leftArm.castShadow = true;
+        leftArm.receiveShadow = true;
+        mesh.add(leftArm);
+
+        const rightArm = new THREE.Mesh(armGeometry, armMaterial);
+        rightArm.position.set(bodyRadius + armWidth/2, bodyHeight/2, 0);
+        rightArm.castShadow = true;
+        rightArm.receiveShadow = true;
+        mesh.add(rightArm);
+
+        const legWidth = 0.1, legHeight = 0.4, legDepth = 0.1;
+        const legGeometry = new THREE.BoxGeometry(legWidth, legHeight, legDepth);
+        const legMaterial = new THREE.MeshStandardMaterial({ color: 0x0000ff });
+
+        const leftLeg = new THREE.Mesh(legGeometry, legMaterial);
+        leftLeg.position.set(-bodyRadius/2, legHeight/2, 0); // inside body footprint
+        leftLeg.castShadow = true;
+        leftLeg.receiveShadow = true;
+        mesh.add(leftLeg);
+
+        const rightLeg = new THREE.Mesh(legGeometry, legMaterial);
+        rightLeg.position.set(bodyRadius/2, legHeight/2, 0);
+        rightLeg.castShadow = true;
+        rightLeg.receiveShadow = true;
+        mesh.add(rightLeg);
+
+        // Store references for animation
+        mesh.userData = {
+          leftLeg: leftLeg,
+          rightLeg: rightLeg,
+          originalLeftLegPosition: leftLeg.position.clone(),
+          originalRightLegPosition: rightLeg.position.clone(),
+          body: body,
+          head: head,
+          leftArm: leftArm,
+          rightArm: rightArm,
+          animationState: 'idle',
+          animationTime: 0
+        };
       } else {
+        // diamond
         geometry = new THREE.OctahedronGeometry(0.25);
         material = new THREE.MeshStandardMaterial({
           color: 0x00ff66,
@@ -263,9 +340,9 @@
           metalness: 0.25,
           roughness: 0.2
         });
+        mesh = new THREE.Mesh(geometry, material);
       }
 
-      const mesh = new THREE.Mesh(geometry, material);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.position.set(worldX(x), 0, worldZ(z));
@@ -313,13 +390,14 @@
 
       playerX = 1;
       playerZ = 1;
+      playerObject = null;
 
       for (const obj of levelData.objects) {
+        const createdObj = createObject(obj.type, obj.x, obj.y);
         if (obj.type === 'player') {
-          playerX = obj.x;
-          playerZ = obj.y;
-        } else {
-          createObject(obj.type, obj.x, obj.y);
+          playerX = createdObj.x;
+          playerZ = createdObj.z;
+          playerObject = createdObj;
         }
       }
     }
@@ -418,8 +496,24 @@
       // Walking through dirt digs it automatically.
       removeDirt(x, z);
 
+      // Store old position for player animation interpolation
+      let oldX = playerObject ? playerObject.x : playerX;
+      let oldZ = playerObject ? playerObject.z : playerZ;
+
       playerX = x;
       playerZ = z;
+
+      // Update player object position for smooth animation
+      if (playerObject) {
+        playerObject.previousX = oldX;
+        playerObject.previousZ = oldZ;
+        playerObject.x = playerX;
+        playerObject.z = playerZ;
+      }
+
+      // Store direction for leaning animation
+      lastMoveDir.x = dx;
+      lastMoveDir.z = dz;
 
       updateCameraPosition();
     }
@@ -573,6 +667,13 @@
         obj.previousZ = obj.z;
       }
 
+      // Detect player movement for animation
+      if (playerObject) {
+        playerJustMoved = (playerObject.x !== playerObject.previousX) || (playerObject.z !== playerObject.previousZ);
+      } else {
+        playerJustMoved = false;
+      }
+
       // Reverse order prevents lower boulders being updated
       // before upper boulders in the same tick.
       const boulders = gameObjects
@@ -713,6 +814,76 @@
         `Boulders: ${gameObjects.filter(o => o.type === 'boulder').length}\n` +
         `VR active: ${renderer.xr.isPresenting}\n` +
         `Frame: ${frameCount}`;
+    }
+
+    // Player animation function
+    function applyPlayerAnimation(obj, alpha, delta) {
+      // Only animate the player mesh
+      if (obj.type !== 'player') return;
+
+      const userData = obj.userData;
+      if (!userData) return;
+
+      // Update animation time
+      userData.animationTime += delta;
+
+      // Determine animation state based on movement and digging
+      let newState = 'idle';
+      if (isDigging) {
+        newState = 'digging';
+      } else if (playerJustMoved) {
+        newState = 'walking';
+      }
+
+      // If state changed, reset animation time for new state
+      if (newState !== userData.animationState) {
+        userData.animationState = newState;
+        userData.animationTime = 0;
+      }
+
+      // Apply animation based on state
+      let offsetY = 0;
+      let rotationX = 0;
+      let rotationZ = 0;
+
+      switch (userData.animationState) {
+        case 'idle':
+          // Slow bob up and down
+          offsetY = Math.sin(userData.animationTime * 2) * 0.02;
+          break;
+        case 'walking':
+          // Faster bob and lean in direction of movement
+          offsetY = Math.sin(userData.animationTime * 8) * 0.03;
+          // Lean based on last move direction
+          rotationX = -lastMoveDir.z * 0.2; // lean forward/back
+          rotationZ = lastMoveDir.x * 0.2;   // lean left/right
+          break;
+        case 'digging':
+          // Quick downward punch
+          const digProgress = 1.0 - (diggingTimer / digDuration); // 0 to 1
+          offsetY = -Math.sin(digProgress * Math.PI) * 0.1; // down then up
+          break;
+      }
+
+      // Apply offset to the mesh position (we already set position based on interpolation)
+      // We'll add an offset on top of the interpolated position
+      obj.mesh.position.y += offsetY;
+
+      // Apply rotation (we'll rotate the whole group)
+      obj.mesh.rotation.x = rotationX;
+      obj.mesh.rotation.z = rotationZ;
+
+      // Animate legs for walking
+      if (userData.animationState === 'walking' && userData.leftLeg && userData.rightLeg) {
+        // Alternate leg movement
+        const legAngle = Math.sin(userData.animationTime * 10) * 0.3; // radians
+        userData.leftLeg.rotation.x = legAngle;
+        userData.rightLeg.rotation.x = -legAngle;
+      } else {
+        // Reset leg rotation for idle/digging
+        if (userData.leftLeg) userData.leftLeg.rotation.x = 0;
+        if (userData.rightLeg) userData.rightLeg.rotation.x = 0;
+      }
     }
 
     // --------------------------------------------------
@@ -860,6 +1031,9 @@
             0,
             worldZ(z)
           );
+
+          // Apply player animation
+          applyPlayerAnimation(obj, alpha, delta);
         }
 
         updateLaser(controller1, laser1);
@@ -869,6 +1043,14 @@
 
         frameCount++;
         updateDebugPanel();
+
+        // Update digging timer
+        if (isDigging) {
+          diggingTimer -= delta;
+          if (diggingTimer <= 0) {
+            isDigging = false;
+          }
+        }
       } catch (error) {
         showError(error);
       }
