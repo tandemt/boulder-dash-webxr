@@ -71,20 +71,20 @@
     - Create level selection menu UI
     - ✅ COMPLETED
 
-## Current Work
-
 16. **Create player with Animations** (1.0 days)
     - Add animated player model with walking/idle states
     - Implement sprite sheet or keyframe animation system
     - Add animation transitions based on player state (moving, digging, idle)
     - ✅ COMPLETED
 
-## Future Milestones
+## Current Work
 
 17. **Multiple Level Support** (0.5 days)
     - Implement level sequencing and progression
     - Add level completion detection
     - PLANNED
+
+## Future Milestones
 
 18. **Enhanced Graphics and Effects** (1.0 days)
     - Improve visual effects for digging, falling, etc.
