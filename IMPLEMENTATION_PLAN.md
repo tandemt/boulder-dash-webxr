@@ -77,24 +77,24 @@
     - Add animation transitions based on player state (moving, digging, idle)
     - ✅ COMPLETED
 
-## Current Work
-
 17. **Level Completion Detection and Save/Load System** (0.5 days)
     - Implement level completion detection (detecting when all objectives are met, triggering level completion)
     - Add save/load game state functionality (persisting progress between sessions)
-    - PLANNED
-
-## Future Milestones
+    - ✅ COMPLETED
 
 18. **Level Enhancements and Metadata** (0.75 days)
     - Implement level difficulty scaling or procedural level generation
     - Work on level metadata (titles, descriptions, preview images) for the selection menu
-    - PLANNED
+    - ✅ COMPLETED
+
+## Current Work
 
 19. **Enhanced Graphics and Effects** (1.0 days)
     - Improve visual effects for digging, falling, etc.
     - Add particle systems or animations
     - PLANNED
+
+## Future Milestones
 
 20. **Sound Effects and Music** (0.5 days)
     - Add audio feedback for actions
@@ -107,6 +107,10 @@
 
 22. **Performance Optimization** (0.5 days)
     - Optimize rendering and logic updates
+    - PLANNED
+
+23. **Future Milestone Placeholder** (0.5 days)
+    - Additional enhancements as needed
     - PLANNED
 
 ## Notes

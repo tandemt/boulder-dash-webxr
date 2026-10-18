@@ -69,7 +69,15 @@
       background: rgba(0, 0, 0, 0.7);
       transform: scale(1.05);
     }
-  </style>
+  .level-title {
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+.level-description {
+  font-size: 0.9em;
+  opacity: 0.8;
+}
+</style>
 </head>
 
 <body>
@@ -89,84 +97,138 @@
     // LEVELS
     // --------------------------------------------------
 
-    const LEVELS = [
-      {
-        "width": 9,
-        "height": 9,
-        "timeLimit": 60,
-        "diamondsRequired": 1,
-        "grid": [
-          ["W","W","W","W","W","W","W","W","W"],
-          ["W",".",".",".",".",".",".",".","W"],
-          ["W",".",".","B",".",".",".",".","W"], // boulder at (2,2)
-          ["W",".",".",".",".",".",".",".","W"],
-          ["W",".",".",".",".",".",".",".","W"],
-          ["W",".",".",".",".",".",".",".","W"],
-          ["W",".","D","D","D","D","D",".","W"], // dirt platform at x=2,3,4,5,6
-          ["W",".",".",".",".",".",".",".","W"],
-          ["W","W","W","W","W","W","W","W","W"]
-        ],
-        "objects": [
-          {"type": "player", "x": 1, "y": 1},
-          {"type": "diamond", "x": 4, "y": 5},
-          {"type": "boulder", "x": 2, "y": 2}
-        ]
-      },
-      {
-        "width": 10,
-        "height": 10,
-        "timeLimit": 120,
-        "diamondsRequired": 2,
-        "grid": [
-          ["W","W","W","W","W","W","W","W","W","W"],
-          ["W",".",".",".",".",".",".",".",".","W"],
-          ["W",".",".",".",".",".",".","B",".","W"], // boulder at (2,7)
-          ["W",".",".",".",".",".",".",".",".","W"],
-          ["W",".",".",".",".",".","D",".",".","W"], // dirt at (6,2)
-          ["W",".",".",".",".",".","D",".",".","W"], // dirt at (6,3)
-          ["W",".",".",".",".",".","D",".",".","W"], // dirt at (6,4)
-          ["W",".",".",".",".",".",".",".",".","W"],
-          ["W",".","D","D","D","D","D","D",".","W"], // dirt platform at x=1-7, y=7
-          ["W","W","W","W","W","W","W","W","W","W"]
-        ],
-        "objects": [
-          {"type": "player", "x": 1, "y": 1},
-          {"type": "diamond", "x": 8, "y": 2},
-          {"type": "diamond", "x": 8, "y": 8}
-        ]
-      },
-      {
-        "width": 12,
-        "height": 8,
-        "timeLimit": 90,
-        "diamondsRequired": 3,
-        "grid": [
-          ["W","W","W","W","W","W","W","W","W","W","W","W"],
-          ["W",".",".",".",".",".",".",".",".",".",".","W"],
-          ["W",".",".","B",".",".",".",".",".",".",".","W"], // boulder at (2,2)
-          ["W",".",".",".",".",".",".",".",".",".",".","W"],
-          ["W",".",".",".",".",".",".",".",".","D",".","W"], // dirt at (9,3)
-          ["W",".",".",".",".",".",".",".",".","D",".","W"], // dirt at (9,4)
-          ["W",".",".",".",".",".",".",".",".","D",".","W"], // dirt at (9,5)
-          ["W",".","D","D","D","D","D","D","D","D",".","W"], // dirt platform
-          ["W","W","W","W","W","W","W","W","W","W","W","W"]
-        ],
-        "objects": [
-          {"type": "player", "x": 1, "y": 1},
-          {"type": "diamond", "x": 5, "y": 2},
-          {"type": "diamond", "x": 6, "y": 5},
-          {"type": "diamond", "x": 10, "y": 6}
-        ]
+    // Generator functions
+    function generateGrid(width, height) {
+      // Create a grid filled with empty ('.')
+      const grid = Array.from({ length: height }, () => Array(width).fill('.'));
+
+      // Set borders to walls
+      for (let x = 0; x < width; x++) {
+        grid[0][x] = 'W';
+        grid[height-1][x] = 'W';
       }
-    ];
+      for (let y = 0; y < height; y++) {
+        grid[y][0] = 'W';
+        grid[y][width-1] = 'W';
+      }
+
+      // Randomly place dirt inside (with probability 0.3)
+      for (let y = 1; y < height-1; y++) {
+        for (let x = 1; x < width-1; x++) {
+          if (Math.random() < 0.3) {
+            grid[y][x] = 'D';
+          }
+        }
+      }
+
+      return grid;
+    }
+
+    function createLevelPreview(level) {
+      // Generate a simple color preview as a data URL
+      // We'll create a 20x20 pixel canvas and fill it with a color based on the level index
+      const canvas = document.createElement('canvas');
+      canvas.width = 20;
+      canvas.height = 20;
+      const ctx = canvas.getContext('2d');
+      // Use hue based on level index to get a variety of colors
+      const hue = (level.index * 30) % 360; // 0-360
+      ctx.fillStyle = `hsl(${hue}, 70%, 50%)`;
+      ctx.fillRect(0, 0, 20, 20);
+      return canvas.toDataURL();
+    }
+
+    function generateLevel(index) {
+      // Deterministic but varying parameters based on index
+      const width = 8 + (index % 5); // 8-12
+      const height = 8 + ((index * 7) % 5); // 8-12
+
+      const timeLimit = 30 + index * 5; // 30, 35, 40, ... up to 30+29*5=175
+      const diamondsRequired = 1 + (index % 5); // 1-5
+
+      // Generate grid
+      const grid = generateGrid(width, height);
+
+      // Place player at (1,1) - make sure it's empty
+      grid[1][1] = '.';
+
+      // Place diamonds
+      const diamonds = [];
+      for (let i = 0; i < diamondsRequired; i++) {
+        let pos;
+        do {
+          pos = {
+            x: 1 + Math.floor(Math.random() * (width-2)),
+            y: 1 + Math.floor(Math.random() * (height-2))
+          };
+        } while (grid[pos.y][pos.x] !== '.' ||
+                 (pos.x === 1 && pos.y === 1) || // player start
+                 diamonds.some(d => d.x === pos.x && d.y === pos.y));
+        grid[pos.y][pos.x] = '.'; // keep the ground as empty (diamond is an object)
+        diamonds.push({ type: 'diamond', x: pos.x, y: pos.y });
+      }
+
+      // Place boulders (number = diamondsRequired + 2)
+      const boulders = [];
+      const boulderCount = diamondsRequired + 2;
+      for (let i = 0; i < boulderCount; i++) {
+        let pos;
+        do {
+          pos = {
+            x: 1 + Math.floor(Math.random() * (width-2)),
+            y: 1 + Math.floor(Math.random() * (height-2))
+          };
+        } while (grid[pos.y][pos.x] !== '.' ||
+                 (pos.x === 1 && pos.y === 1) || // player start
+                 diamonds.some(d => d.x === pos.x && d.y === pos.y) ||
+                 boulders.some(b => b.x === pos.x && b.y === pos.y));
+        grid[pos.y][pos.x] = '.'; // keep ground empty
+        boulders.push({ type: 'boulder', x: pos.x, y: pos.y });
+      }
+
+      const objects = [
+        { type: 'player', x: 1, y: 1 },
+        ...diamonds,
+        ...boulders
+      ];
+
+      // Title and description
+      const title = `Level ${index + 1}`;
+      const description = `A procedurally generated level with ${width}x${height} grid, ${diamondsRequired} diamonds to collect, and ${timeLimit} seconds.`;
+
+      // Preview image
+      const previewImage = createLevelPreview({ index, width, height, diamondsRequired, timeLimit });
+
+      return {
+        width,
+        height,
+        timeLimit,
+        diamondsRequired,
+        grid,
+        objects,
+        title,
+        description,
+        previewImage
+      };
+    }
+
+    function generateLevels(count) {
+      const levels = [];
+      for (let i = 0; i < count; i++) {
+        levels.push(generateLevel(i));
+      }
+      return levels;
+    }
+
+    const LEVELS = generateLevels(30);
 
     // Current level tracking
     let currentLevelIndex = 0;
     let levelData = null;
 
     // Level completion tracking
-    let initialDiamondCount = 0;
     let collectedDiamondCount = 0;
+    let completedLevels = []; // for save/load
 
     // --------------------------------------------------
     // CONSTANTS AND STATE
@@ -216,6 +278,31 @@
 
     const raycaster = new THREE.Raycaster();
     const tempMatrix = new THREE.Matrix4();
+
+    // Save/Load Game State
+    function saveGameState() {
+      const saveData = {
+        completedLevels: completedLevels,
+        currentLevelIndex: currentLevelIndex
+      };
+      localStorage.setItem('boulderDashSave', JSON.stringify(saveData));
+    }
+
+    function loadGameState() {
+      const saveData = localStorage.getItem('boulderDashSave');
+      if (saveData) {
+        const data = JSON.parse(saveData);
+        completedLevels = data.completedLevels || [];
+        currentLevelIndex = data.currentLevelIndex || 0;
+      } else {
+        // Initialize if no save data
+        completedLevels = [];
+        currentLevelIndex = 0;
+      }
+    }
+
+    // Load saved game state
+    loadGameState();
 
     // --------------------------------------------------
     // UTILITIES
@@ -488,7 +575,7 @@
         collectedDiamondCount++;
 
         // Check for level completion
-        if (collectedDiamondCount >= initialDiamondCount && initialDiamondCount > 0) {
+        if (levelData.diamondsRequired > 0 && collectedDiamondCount >= levelData.diamondsRequired) {
           completeLevel();
         }
       }
@@ -525,6 +612,12 @@
     function completeLevel() {
       // Show level completion message
       showLevelCompleteUI();
+
+      // Mark current level as completed
+      if (!completedLevels.includes(currentLevelIndex)) {
+        completedLevels.push(currentLevelIndex);
+        saveGameState();
+      }
 
       // Wait briefly then proceed to next level (in a real game, you might wait for player input)
       setTimeout(() => {
@@ -572,7 +665,6 @@
       initGrid(levelData);
 
       // Reset diamond counting
-      initialDiamondCount = levelData.objects.filter(obj => obj.type === 'diamond').length;
       collectedDiamondCount = 0;
 
       // Recreate grid meshes
@@ -809,7 +901,7 @@
         `Three.js: ${THREE.REVISION}\n` +
         `Level: ${currentLevelIndex + 1}/${LEVELS.length}\n` +
         `Player: (${playerX}, ${playerZ})\n` +
-        `Diamonds: ${collectedDiamondCount}/${initialDiamondCount}\n` +
+        `Diamonds: ${collectedDiamondCount}/${levelData.diamondsRequired}\n` +
         `Objects: ${gameObjects.length}\n` +
         `Boulders: ${gameObjects.filter(o => o.type === 'boulder').length}\n` +
         `VR active: ${renderer.xr.isPresenting}\n` +
@@ -917,7 +1009,7 @@
 
       overlay.innerHTML = `
         <div>Level Complete!</div>
-        <div>Collected ${collectedDiamondCount}/${initialDiamondCount} diamonds</div>
+        <div>Collected ${collectedDiamondCount}/${levelData.diamondsRequired} diamonds</div>
         <div>Loading next level...</div>
       `;
       overlay.style.display = 'flex';
@@ -957,7 +1049,11 @@
 
       let levelListHTML = '<div>Select Level</div>';
       LEVELS.forEach((level, index) => {
-        levelListHTML += `<div class="level-option" data-index="${index}">Level ${index + 1}</div>`;
+        levelListHTML += `
+          <div class="level-option" data-index="${index}">
+            <div class="level-title">${level.title}</div>
+            <div class="level-description">${level.description}</div>
+          </div>`;
       });
 
       overlay.innerHTML = levelListHTML + '<div style="margin-top: 20px; font-size: 14pt;">Use number keys 1-9 to select</div>';
@@ -1077,7 +1173,6 @@
         initGrid(levelData);
 
         // Initialize diamond counting for level completion
-        initialDiamondCount = levelData.objects.filter(obj => obj.type === 'diamond').length;
         collectedDiamondCount = 0;
 
         createGridMeshes();
@@ -1162,6 +1257,7 @@
               const levelIndex = parseInt(key) - 1;
               if (levelIndex >= 0 && levelIndex < LEVELS.length && levelIndex !== currentLevelIndex) {
                 currentLevelIndex = levelIndex;
+                saveGameState();
                 hideLevelSelectionUI();
                 resetLevel();
               }
