@@ -83,8 +83,9 @@
     - ✅ COMPLETED
 
 18. **Level Enhancements and Metadata** (0.75 days)
-    - Implement level difficulty scaling or procedural level generation
-    - Work on level metadata (titles, descriptions, preview images) for the selection menu
+    - Implemented procedural level generation for at least 30 unique levels with metadata (titles, descriptions, preview images)
+    - Enhanced level selection UI to display level titles and descriptions in a compact dropdown
+    - Adjusted level scale (TILE_SIZE=0.5) and camera distance for better usability
     - ✅ COMPLETED
 
 ## Current Work
