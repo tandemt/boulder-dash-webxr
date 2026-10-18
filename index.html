@@ -234,7 +234,7 @@
     // CONSTANTS AND STATE
     // --------------------------------------------------
 
-    const TILE_SIZE = 1;
+    const TILE_SIZE = 0.5;
     const EMPTY = 0;
     const DIRT = 1;
     const WALL = 2;
@@ -490,12 +490,12 @@
     }
 
     function createGridMeshes() {
-      const wallGeometry = new THREE.BoxGeometry(1, 1, 1);
+      const wallGeometry = new THREE.BoxGeometry(TILE_SIZE, TILE_SIZE, TILE_SIZE);
       const wallMaterial = new THREE.MeshStandardMaterial({
         color: 0x555555
       });
 
-      const dirtGeometry = new THREE.BoxGeometry(1, 0.12, 1);
+      const dirtGeometry = new THREE.BoxGeometry(TILE_SIZE, 0.12, TILE_SIZE);
       const dirtMaterial = new THREE.MeshStandardMaterial({
         color: 0x8b4513
       });
@@ -506,10 +506,10 @@
 
           if (grid[z][x] === WALL) {
             mesh = new THREE.Mesh(wallGeometry, wallMaterial);
-            mesh.position.set(worldX(x), 0, worldZ(z));
+            mesh.position.set(worldX(x), TILE_SIZE/2, worldZ(z));
           } else if (grid[z][x] === DIRT) {
             mesh = new THREE.Mesh(dirtGeometry, dirtMaterial);
-            mesh.position.set(worldX(x), -0.44, worldZ(z));
+            mesh.position.set(worldX(x), 0.12/2, worldZ(z));
           }
 
           if (mesh) {
