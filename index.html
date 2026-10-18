@@ -1029,57 +1029,42 @@
         overlay = document.createElement('div');
         overlay.id = 'level-selection-overlay';
         overlay.style.position = 'absolute';
-        overlay.style.top = '0';
-        overlay.style.left = '0';
-        overlay.style.width = '100%';
-        overlay.style.height = '100%';
+        overlay.style.top = '10px';
+        overlay.style.right = '10px';
+        overlay.style.width = '260px';
         overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
         overlay.style.color = '#00ff00';
-        overlay.style.display = 'flex';
-        overlay.style.flexDirection = 'column';
-        overlay.style.alignItems = 'center';
-        overlay.style.justifyContent = 'center';
-        overlay.style.fontSize = '18pt';
+        overlay.style.padding = '10px';
+        overlay.style.borderRadius = '4px';
         overlay.style.zIndex = '1000';
-        overlay.style.textAlign = 'center';
-        overlay.style.padding = '20px';
         overlay.style.boxSizing = 'border-box';
         document.body.appendChild(overlay);
       }
+      overlay.style.display = 'block';
 
-      let levelListHTML = '<div>Select Level</div>';
+      // Create label and select element
+      let html = '<label for="level-select" style="display: block; margin-bottom: 5px; font-weight: bold;">Select Level:</label>';
+      html += '<select id="level-select" style="width: 100%; padding: 5px; font-size: 14pt;">';
       LEVELS.forEach((level, index) => {
-        levelListHTML += `
-          <div class="level-option" data-index="${index}">
-            <div class="level-title">${level.title}</div>
-            <div class="level-description">${level.description}</div>
-          </div>`;
+        html += `<option value="${index}" title="${level.description}">${level.title}</option>`;
       });
+      html += '</select>';
 
-      overlay.innerHTML = levelListHTML + '<div style="margin-top: 20px; font-size: 14pt;">Use number keys 1-9 to select</div>';
-      overlay.style.display = 'flex';
+      overlay.innerHTML = html;
 
-      // Add click handlers to level options
-      setTimeout(() => {
-        document.querySelectorAll('.level-option').forEach(option => {
-          option.addEventListener('click', () => {
-            const index = parseInt(option.getAttribute('data-index'));
-            if (index !== currentLevelIndex) {
-              currentLevelIndex = index;
-              hideLevelSelectionUI();
-              resetLevel();
-            }
-          });
-
-          // Add hover effect
-          option.addEventListener('mouseenter', () => {
-            option.style.color = '#ffff00';
-          });
-          option.addEventListener('mouseleave', () => {
-            option.style.color = '#00ff00';
-          });
+      // Set current selected level
+      const select = overlay.querySelector('#level-select');
+      if (select) {
+        select.value = currentLevelIndex;
+        select.addEventListener('change', (e) => {
+          const index = parseInt(e.target.value);
+          if (index !== currentLevelIndex) {
+            currentLevelIndex = index;
+            hideLevelSelectionUI();
+            resetLevel();
+          }
         });
-      }, 100);
+      }
     }
 
     function hideLevelSelectionUI() {
