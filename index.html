@@ -1006,31 +1006,6 @@
         }
       }
 
-    // Diamonds also fall and can kill the player
-    const diamonds = gameObjects.filter(obj => obj.type === 'diamond');
-    for (const diamond of diamonds) {
-      const x = diamond.x;
-      const belowZ = diamond.z + 1;
-
-      if (belowZ >= levelData.height) continue;
-
-      // Stop on walls or dirt.
-      if (grid[belowZ][x] !== EMPTY) continue;
-
-      // Stop above another object.
-      if (objectAt(x, belowZ)) continue;
-
-      // Kill player if diamond falls on them
-      if (playerX === x && playerZ === belowZ) {
-        triggerGameOver();
-        continue;
-      }
-
-      const oldZ = diamond.z;
-      diamond.z = belowZ;
-      createParticles(worldX(x), worldZ(oldZ), 0x00ff66, 4); // small diamond dust
-    }
-
     // Monster movement - patrol randomly
     const monsters = gameObjects.filter(obj => obj.type === 'monster');
     for (const monster of monsters) {
