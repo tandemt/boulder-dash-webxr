@@ -976,8 +976,10 @@
         // Stop on walls or dirt.
         if (grid[belowZ][x] !== EMPTY) continue;
 
-        // Stop above another object.
-        if (objectAt(x, belowZ)) continue;
+        // Stop above another object (but not the player — a boulder
+        // falling onto the player should crush them).
+        const belowObj = objectAt(x, belowZ);
+        if (belowObj && belowObj.type !== 'player') continue;
 
         // Kill player if boulder falls on them
         if (playerX === x && playerZ === belowZ) {
