@@ -981,8 +981,9 @@
         const belowObj = objectAt(x, belowZ);
         if (belowObj && belowObj.type !== 'player' && belowObj.type !== 'monster') continue;
 
-        // Kill player if boulder falls on them
+        // Kill player if boulder falls on them (drops onto their cell)
         if (playerX === x && playerZ === belowZ) {
+          boulder.z = belowZ; // boulder lands on the player
           triggerGameOver();
           continue;
         }
