@@ -91,6 +91,7 @@
 19. **Enhanced Graphics and Effects** (1.0 days)
     - Added particle system for digging, diamond collection, and boulder falling effects
     - Improved visual feedback during gameplay with dust, sparkle, and dirt particles
+    - Added monster AI (patrol movement), death mechanics (falling boulders/diamonds kill player, monster touch kills player, boulders kill monsters), and game over UI with restart
     - ✅ COMPLETED
 
 ## Current Work
@@ -103,7 +104,7 @@
 
 21. **UI Refinements and Polish** (0.75 days)
     - Improve debug panel information
-    - Add game over and victory conditions
+    - Add victory conditions
     - PLANNED
 
 22. **Performance Optimization** (0.5 days)

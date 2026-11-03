@@ -186,15 +186,38 @@
         boulders.push({ type: 'boulder', x: pos.x, y: pos.y });
       }
 
+      // Place monsters (start appearing from level 3, count grows with level)
+      const monsters = [];
+      if (index >= 2) {
+        const monsterCount = 1 + Math.floor(index / 4); // 1 monster at level 3, more later
+        for (let i = 0; i < monsterCount; i++) {
+          let pos;
+          do {
+            pos = {
+              x: 1 + Math.floor(Math.random() * (width-2)),
+              y: 1 + Math.floor(Math.random() * (height-2))
+            };
+          } while (grid[pos.y][pos.x] !== '.' ||
+                   (pos.x === 1 && pos.y === 1) || // player start
+                   diamonds.some(d => d.x === pos.x && d.y === pos.y) ||
+                   boulders.some(b => b.x === pos.x && b.y === pos.y) ||
+                   monsters.some(m => m.x === pos.x && m.y === pos.y));
+          grid[pos.y][pos.x] = '.'; // keep ground empty
+          monsters.push({ type: 'monster', x: pos.x, y: pos.y });
+        }
+      }
+
       const objects = [
         { type: 'player', x: 1, y: 1 },
         ...diamonds,
-        ...boulders
+        ...boulders,
+        ...monsters
       ];
 
       // Title and description
+      const monsterNote = index >= 2 ? ` with ${1 + Math.floor(index / 4)} monster(s)` : '';
       const title = `Level ${index + 1}`;
-      const description = `A procedurally generated level with ${width}x${height} grid, ${diamondsRequired} diamonds to collect, and ${timeLimit} seconds.`;
+      const description = `A procedurally generated level with ${width}x${height} grid, ${diamondsRequired} diamonds to collect, and ${timeLimit} seconds.${monsterNote}`;
 
       // Preview image
       const previewImage = createLevelPreview({ index, width, height, diamondsRequired, timeLimit });
@@ -245,32 +268,32 @@
     let particles = [];
     let particleGroup = null;
 
-    function createParticles(x, z, color, count = 8) {
+    function createParticles(x, z, color, count = 12) {
       if (!particleGroup) {
-        const particleGeometry = new THREE.BoxGeometry(0.08, 0.08, 0.08);
-        const particleMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
         particleGroup = new THREE.Group();
         scene.add(particleGroup);
       }
 
       for (let i = 0; i < count; i++) {
+        const size = 0.12 + Math.random() * 0.12;
         const mesh = new THREE.Mesh(
-          new THREE.BoxGeometry(0.08, 0.08, 0.08),
-          new THREE.MeshBasicMaterial({ color: color })
+          new THREE.BoxGeometry(size, size, size),
+          new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 1 })
         );
-        mesh.position.set(x, 0.1, z);
-        const angle = (Math.random() * Math.PI * 2);
-        const speed = 0.05 + Math.random() * 0.08;
+        mesh.position.set(x, 0.2, z);
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 0.08 + Math.random() * 0.15;
+        const rise = Math.random() < 0.5; // some particles go up
         particles.push({
           mesh: mesh,
           x: x,
-          y: 0.1,
+          y: 0.2,
           z: z,
           vx: Math.cos(angle) * speed,
-          vy: 0.08 + Math.random() * 0.08,
+          vy: rise ? (0.12 + Math.random() * 0.12) : (-0.05 + Math.random() * 0.05),
           vz: Math.sin(angle) * speed,
           life: 1.0,
-          maxLife: 0.6 + Math.random() * 0.4
+          maxLife: 0.8 + Math.random() * 0.6
         });
         particleGroup.add(mesh);
       }
@@ -283,10 +306,11 @@
         p.x += p.vx;
         p.y += p.vy;
         p.z += p.vz;
-        p.vy -= 0.15; // gravity
+        p.vy -= 0.25; // stronger gravity
         p.mesh.position.set(p.x, p.y, p.z);
-        p.mesh.scale.setScalar(p.life / p.maxLife);
-        p.mesh.material.opacity = p.life / p.maxLife;
+        const lifeRatio = p.life / p.maxLife;
+        p.mesh.scale.setScalar(lifeRatio);
+        p.mesh.material.opacity = lifeRatio;
         if (p.life <= 0) {
           particleGroup.remove(p.mesh);
           particles.splice(i, 1);
@@ -403,6 +427,39 @@
           roughness: 0.9
         });
         mesh = new THREE.Mesh(geometry, material);
+      } else if (type === 'monster') {
+        // Monster: red glowing sphere that patrols
+        mesh = new THREE.Group();
+
+        const bodyRadius = 0.3;
+        const bodyGeometry = new THREE.SphereGeometry(bodyRadius, 16, 16);
+        const bodyMaterial = new THREE.MeshStandardMaterial({
+          color: 0xff0000,
+          emissive: 0x330000,
+          metalness: 0.3,
+          roughness: 0.4
+        });
+        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+        body.position.y = bodyRadius;
+        body.castShadow = true;
+        body.receiveShadow = true;
+        mesh.add(body);
+
+        // Eyes
+        const eyeGeometry = new THREE.SphereGeometry(0.08, 8, 8);
+        const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+        leftEye.position.set(-0.1, bodyRadius + 0.05, bodyRadius - 0.05);
+        mesh.add(leftEye);
+        const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+        rightEye.position.set(0.1, bodyRadius + 0.05, bodyRadius - 0.05);
+        mesh.add(rightEye);
+
+        mesh.userData = {
+          moveTimer: 0,
+          moveInterval: 1.5 + Math.random() * 1.5, // seconds between moves
+          body: body
+        };
       } else if (type === 'player') {
         // Create a group for the player
         mesh = new THREE.Group();
@@ -588,7 +645,7 @@
       // Spawn dirt particles when digging
       const wx = worldX(x);
       const wz = worldZ(z);
-      createParticles(wx, wz, 0x8b4513, 6); // brown dirt particles
+      createParticles(wx, wz, 0x8b4513, 10); // brown dirt particles
     }
 
     // --------------------------------------------------
@@ -635,7 +692,7 @@
         collectedDiamondCount++;
 
         // Spawn sparkle particles when collecting a diamond
-        createParticles(dx, dz, 0x00ff66, 10);
+        createParticles(dx, dz, 0x00ff66, 15);
 
         // Check for level completion
         if (levelData.diamondsRequired > 0 && collectedDiamondCount >= levelData.diamondsRequired) {
@@ -687,6 +744,39 @@
         hideLevelCompleteUI();
         loadNextLevel();
       }, 2000); // 2 second delay to show completion message
+    }
+
+    function triggerGameOver() {
+      // Show game over overlay
+      let overlay = document.getElementById('game-over-overlay');
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'game-over-overlay';
+        overlay.style.position = 'absolute';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
+        overlay.style.color = '#ff0000';
+        overlay.style.display = 'flex';
+        overlay.style.flexDirection = 'column';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+        overlay.style.fontSize = '32pt';
+        overlay.style.zIndex = '2000';
+        overlay.style.textAlign = 'center';
+        overlay.style.padding = '20px';
+        overlay.style.boxSizing = 'border-box';
+        document.body.appendChild(overlay);
+      }
+
+      overlay.innerHTML = `
+        <div>GAME OVER!</div>
+        <div style="font-size: 16pt; margin-top: 10px;">You were caught by a monster or crushed.</div>
+        <button onclick="location.reload()" style="margin-top: 20px; padding: 10px 20px; font-size: 14pt; background: #00ff00; color: #000; border: none; border-radius: 4px; cursor: pointer;">Restart Game</button>
+      `;
+      overlay.style.display = 'flex';
     }
 
     function loadNextLevel() {
@@ -844,10 +934,14 @@
         // Stop on walls or dirt.
         if (grid[belowZ][x] !== EMPTY) continue;
 
-        // Stop above another object or the player.
+        // Stop above another object.
         if (objectAt(x, belowZ)) continue;
 
-        if (playerX === x && playerZ === belowZ) continue;
+        // Kill player if boulder falls on them
+        if (playerX === x && playerZ === belowZ) {
+          triggerGameOver();
+          continue;
+        }
 
         const oldZ = boulder.z;
         boulder.z = belowZ;
@@ -855,7 +949,72 @@
         // Spawn dust particles when boulder falls
         const wx = worldX(x);
         const wz = worldZ(oldZ);
-        createParticles(wx, wz, 0x777777, 4); // grey dust particles
+        createParticles(wx, wz, 0x777777, 8); // grey dust particles
+
+        // Kill monster if boulder falls on it
+        const monster = objectAt(x, belowZ, 'monster');
+        if (monster) {
+          scene.remove(monster.mesh);
+          gameObjects = gameObjects.filter(obj => obj !== monster);
+          createParticles(worldX(x), worldZ(belowZ), 0xff0000, 12); // monster death particles
+        }
+      }
+
+    // Diamonds also fall and can kill the player
+    const diamonds = gameObjects.filter(obj => obj.type === 'diamond');
+    for (const diamond of diamonds) {
+      const x = diamond.x;
+      const belowZ = diamond.z + 1;
+
+      if (belowZ >= levelData.height) continue;
+
+      // Stop on walls or dirt.
+      if (grid[belowZ][x] !== EMPTY) continue;
+
+      // Stop above another object.
+      if (objectAt(x, belowZ)) continue;
+
+      // Kill player if diamond falls on them
+      if (playerX === x && playerZ === belowZ) {
+        triggerGameOver();
+        continue;
+      }
+
+      const oldZ = diamond.z;
+      diamond.z = belowZ;
+      createParticles(worldX(x), worldZ(oldZ), 0x00ff66, 4); // small diamond dust
+    }
+
+    // Monster movement - patrol randomly
+    const monsters = gameObjects.filter(obj => obj.type === 'monster');
+    for (const monster of monsters) {
+      monster.userData.moveTimer -= TICK;
+      if (monster.userData.moveTimer <= 0) {
+        monster.userData.moveTimer = monster.userData.moveInterval;
+
+        // Try to move in a random direction
+        const dirs = [{x: 0, z: -1}, {x: 0, z: 1}, {x: -1, z: 0}, {x: 1, z: 0}];
+        const dir = dirs[Math.floor(Math.random() * dirs.length)];
+        const nx = monster.x + dir.x;
+        const nz = monster.z + dir.z;
+
+        // Check bounds
+        if (nx < 0 || nx >= levelData.width || nz < 0 || nz >= levelData.height) continue;
+
+        // Don't move into walls
+        if (grid[nz][nx] === WALL) continue;
+
+        // Don't move into boulders
+        if (objectAt(nx, nz, 'boulder')) continue;
+
+        // Kill player if monster touches them
+        if (playerX === nx && playerZ === nz) {
+          triggerGameOver();
+          continue;
+        }
+
+        monster.x = nx;
+        monster.z = nz;
       }
     }
 
@@ -880,7 +1039,7 @@
       laser.scale.z = 5;
       laser.visible = false;
 
-      controller.add(laser);
+      if (controller) controller.add(laser);
       return laser;
     }
 
@@ -973,6 +1132,7 @@
         `Diamonds: ${collectedDiamondCount}/${levelData.diamondsRequired}\n` +
         `Objects: ${gameObjects.length}\n` +
         `Boulders: ${gameObjects.filter(o => o.type === 'boulder').length}\n` +
+        `Monsters: ${gameObjects.filter(o => o.type === 'monster').length}\n` +
         `VR active: ${renderer.xr.isPresenting}\n` +
         `Frame: ${frameCount}`;
     }
@@ -1270,14 +1430,18 @@
         );
 
         controller1 = renderer.xr.getController(0);
-        controller1.addEventListener('selectstart', onSelectStart);
-        controller1.addEventListener('selectend', onSelectEnd);
-        scene.add(controller1);
+        if (controller1) {
+          controller1.addEventListener('selectstart', onSelectStart);
+          controller1.addEventListener('selectend', onSelectEnd);
+          scene.add(controller1);
+        }
 
         controller2 = renderer.xr.getController(1);
-        controller2.addEventListener('selectstart', onSelectStart);
-        controller2.addEventListener('selectend', onSelectEnd);
-        scene.add(controller2);
+        if (controller2) {
+          controller2.addEventListener('selectstart', onSelectStart);
+          controller2.addEventListener('selectend', onSelectEnd);
+          scene.add(controller2);
+        }
 
         laser1 = createLaser(controller1);
         laser2 = createLaser(controller2);
