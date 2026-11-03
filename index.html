@@ -241,6 +241,59 @@
 
     const TICK = 0.1;
 
+    // Particle system for visual effects
+    let particles = [];
+    let particleGroup = null;
+
+    function createParticles(x, z, color, count = 8) {
+      if (!particleGroup) {
+        const particleGeometry = new THREE.BoxGeometry(0.08, 0.08, 0.08);
+        const particleMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        particleGroup = new THREE.Group();
+        scene.add(particleGroup);
+      }
+
+      for (let i = 0; i < count; i++) {
+        const mesh = new THREE.Mesh(
+          new THREE.BoxGeometry(0.08, 0.08, 0.08),
+          new THREE.MeshBasicMaterial({ color: color })
+        );
+        mesh.position.set(x, 0.1, z);
+        const angle = (Math.random() * Math.PI * 2);
+        const speed = 0.05 + Math.random() * 0.08;
+        particles.push({
+          mesh: mesh,
+          x: x,
+          y: 0.1,
+          z: z,
+          vx: Math.cos(angle) * speed,
+          vy: 0.08 + Math.random() * 0.08,
+          vz: Math.sin(angle) * speed,
+          life: 1.0,
+          maxLife: 0.6 + Math.random() * 0.4
+        });
+        particleGroup.add(mesh);
+      }
+    }
+
+    function updateParticles(delta) {
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.life -= delta;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.z += p.vz;
+        p.vy -= 0.15; // gravity
+        p.mesh.position.set(p.x, p.y, p.z);
+        p.mesh.scale.setScalar(p.life / p.maxLife);
+        p.mesh.material.opacity = p.life / p.maxLife;
+        if (p.life <= 0) {
+          particleGroup.remove(p.mesh);
+          particles.splice(i, 1);
+        }
+      }
+    }
+
     let scene;
     let camera;
     let renderer;
@@ -531,6 +584,11 @@
       }
 
       grid[z][x] = EMPTY;
+
+      // Spawn dirt particles when digging
+      const wx = worldX(x);
+      const wz = worldZ(z);
+      createParticles(wx, wz, 0x8b4513, 6); // brown dirt particles
     }
 
     // --------------------------------------------------
@@ -570,9 +628,14 @@
       const diamond = objectAt(x, z, 'diamond');
 
       if (diamond) {
+        const dx = worldX(diamond.x);
+        const dz = worldZ(diamond.z);
         scene.remove(diamond.mesh);
         gameObjects = gameObjects.filter(obj => obj !== diamond);
         collectedDiamondCount++;
+
+        // Spawn sparkle particles when collecting a diamond
+        createParticles(dx, dz, 0x00ff66, 10);
 
         // Check for level completion
         if (levelData.diamondsRequired > 0 && collectedDiamondCount >= levelData.diamondsRequired) {
@@ -786,7 +849,13 @@
 
         if (playerX === x && playerZ === belowZ) continue;
 
+        const oldZ = boulder.z;
         boulder.z = belowZ;
+
+        // Spawn dust particles when boulder falls
+        const wx = worldX(x);
+        const wz = worldZ(oldZ);
+        createParticles(wx, wz, 0x777777, 4); // grey dust particles
       }
     }
 
@@ -1116,6 +1185,9 @@
           // Apply player animation
           applyPlayerAnimation(obj, alpha, delta);
         }
+
+        // Update and render particles
+        updateParticles(delta);
 
         updateLaser(controller1, laser1);
         updateLaser(controller2, laser2);

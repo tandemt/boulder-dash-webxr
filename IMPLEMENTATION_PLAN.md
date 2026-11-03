@@ -88,18 +88,18 @@
     - Adjusted level scale (TILE_SIZE=0.5) and camera distance for better usability
     - ✅ COMPLETED
 
-## Current Work
-
 19. **Enhanced Graphics and Effects** (1.0 days)
-    - Improve visual effects for digging, falling, etc.
-    - Add particle systems or animations
-    - PLANNED
+    - Added particle system for digging, diamond collection, and boulder falling effects
+    - Improved visual feedback during gameplay with dust, sparkle, and dirt particles
+    - ✅ COMPLETED
 
-## Future Milestones
+## Current Work
 
 20. **Sound Effects and Music** (0.5 days)
     - Add audio feedback for actions
     - PLANNED
+
+## Future Milestones
 
 21. **UI Refinements and Polish** (0.75 days)
     - Improve debug panel information
