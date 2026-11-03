@@ -292,6 +292,7 @@
     // Particle system for visual effects
     let particles = [];
     let particleGroup = null;
+    let gameOver = false;
 
     function createParticles(x, z, color, count = 12) {
       if (!particleGroup) {
@@ -697,6 +698,8 @@
     }
 
     function movePlayer(dx, dz) {
+      if (gameOver) return;
+
       const x = playerX + dx;
       const z = playerZ + dz;
 
@@ -709,6 +712,12 @@
 
       // Boulder blocks movement.
       if (objectAt(x, z, 'boulder')) return;
+
+      // Walking into a monster kills the player.
+      if (objectAt(x, z, 'monster')) {
+        triggerGameOver();
+        return;
+      }
 
       // Collect diamonds.
       const diamond = objectAt(x, z, 'diamond');
@@ -776,6 +785,8 @@
     }
 
     function triggerGameOver() {
+      gameOver = true;
+
       // Show game over overlay
       let overlay = document.getElementById('game-over-overlay');
       if (!overlay) {
@@ -936,6 +947,8 @@
     // --------------------------------------------------
 
     function updateLogic() {
+      if (gameOver) return;
+
       for (const obj of gameObjects) {
         obj.previousX = obj.x;
         obj.previousZ = obj.z;
@@ -1030,11 +1043,14 @@
         // Check bounds
         if (nx < 0 || nx >= levelData.width || nz < 0 || nz >= levelData.height) continue;
 
-        // Don't move into walls
-        if (grid[nz][nx] === WALL) continue;
+        // Monsters only walk in open space (not dirt or walls)
+        if (grid[nz][nx] !== EMPTY) continue;
 
         // Don't move into boulders
         if (objectAt(nx, nz, 'boulder')) continue;
+
+        // Don't stack monsters
+        if (objectAt(nx, nz, 'monster')) continue;
 
         // Kill player if monster touches them
         if (playerX === nx && playerZ === nz) {
