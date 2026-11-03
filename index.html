@@ -576,7 +576,11 @@
         x,
         z,
         previousX: x,
-        previousZ: z
+        previousZ: z,
+        ...(type === 'monster' && {
+          moveTimer: 0,
+          moveInterval: 1.5 + Math.random() * 1.5
+        })
       };
 
       gameObjects.push(obj);
