@@ -979,7 +979,7 @@
         // Stop above another object (but not the player — a boulder
         // falling onto the player should crush them).
         const belowObj = objectAt(x, belowZ);
-        if (belowObj && belowObj.type !== 'player') continue;
+        if (belowObj && belowObj.type !== 'player' && belowObj.type !== 'monster') continue;
 
         // Kill player if boulder falls on them
         if (playerX === x && playerZ === belowZ) {
@@ -1001,6 +1001,7 @@
           scene.remove(monster.mesh);
           gameObjects = gameObjects.filter(obj => obj !== monster);
           createParticles(worldX(x), worldZ(belowZ), 0xff0000, 12); // monster death particles
+          continue; // boulder comes to rest on the crushed monster
         }
       }
 
