@@ -738,8 +738,11 @@
         }
       }
 
-      // Walking through dirt digs it automatically.
-      removeDirt(x, z);
+      // Walking through dirt digs it automatically, unless a boulder is
+      // directly above — digging that support would instantly crush the
+      // player, so the dirt stays (the boulder respects it was there).
+      const boulderAbove = objectAt(x, z - 1, 'boulder');
+      if (!boulderAbove) removeDirt(x, z);
 
       // Store old position for player animation interpolation
       let oldX = playerObject ? playerObject.x : playerX;
@@ -976,11 +979,10 @@
         // Stop on walls or dirt.
         if (grid[belowZ][x] !== EMPTY) continue;
 
-        // Stop above another object (including the player — a boulder
-        // respects the support beneath it and settles just above the player
-        // rather than instantly crushing them).
+        // Stop above another solid object (but not the player — a boulder
+        // falling onto the player should crush them).
         const belowObj = objectAt(x, belowZ);
-        if (belowObj && belowObj.type !== 'monster') continue;
+        if (belowObj && belowObj.type !== 'player' && belowObj.type !== 'monster') continue;
 
         const oldZ = boulder.z;
         boulder.z = belowZ;
@@ -989,6 +991,12 @@
         const wx = worldX(x);
         const wz = worldZ(oldZ);
         createParticles(wx, wz, 0x777777, 8); // grey dust particles
+
+        // Kill player if boulder lands on their cell (drops onto them)
+        if (playerX === x && playerZ === belowZ) {
+          triggerGameOver();
+          continue;
+        }
 
         // Kill monster if boulder falls on it
         const monster = objectAt(x, belowZ, 'monster');
