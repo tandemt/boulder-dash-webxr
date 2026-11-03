@@ -294,6 +294,100 @@
     let particleGroup = null;
     let gameOver = false;
 
+    // --------------------------------------------------
+    // AUDIO SYSTEM (Web Audio API, procedural sounds)
+    // --------------------------------------------------
+    let audioCtx = null;
+    let audioEnabled = true;
+
+    function ensureAudio() {
+      if (audioCtx) return audioCtx;
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return null;
+      try {
+        audioCtx = new Ctx();
+      } catch (e) {
+        audioCtx = null;
+      }
+      return audioCtx;
+    }
+
+    function playTone(freq, type, duration, volume = 0.08, when = 0) {
+      const ctx = ensureAudio();
+      if (!ctx || !audioEnabled) return;
+      try {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + when);
+        gain.gain.setValueAtTime(volume, ctx.currentTime + when);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + when + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + when);
+        osc.stop(ctx.currentTime + when + duration);
+      } catch (e) {
+        // Audio failure must never break the game
+      }
+    }
+
+    function resumeAudio() {
+      const ctx = ensureAudio();
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+    }
+
+    function playSound(kind) {
+      if (!audioEnabled) return;
+      switch (kind) {
+        case 'dig': // short low click when removing dirt
+          playTone(120, 'square', 0.06, 0.06);
+          break;
+        case 'collect': // rising arpeggio for diamond
+          playTone(660, 'sine', 0.12, 0.1);
+          playTone(880, 'sine', 0.12, 0.1, 0.06);
+          playTone(1040, 'sine', 0.18, 0.1, 0.12);
+          break;
+        case 'fall': // boulder begins to fall
+          playTone(150, 'sawtooth', 0.15, 0.07);
+          break;
+        case 'land': // boulder lands / comes to rest
+          playTone(90, 'square', 0.18, 0.1);
+          break;
+        case 'killMonster': // boulder crushes a monster
+          playTone(100, 'sawtooth', 0.2, 0.12);
+          playTone(70, 'sawtooth', 0.2, 0.12, 0.08);
+          break;
+        case 'monsterKillPlayer': // monster touches player
+          playTone(220, 'sawtooth', 0.25, 0.12);
+          playTone(150, 'sawtooth', 0.25, 0.12, 0.1);
+          break;
+        case 'crushPlayer': // boulder lands on player
+          playTone(80, 'sawtooth', 0.35, 0.15);
+          playTone(55, 'sawtooth', 0.35, 0.15, 0.12);
+          break;
+        case 'gameOver':
+          playTone(150, 'sawtooth', 0.4, 0.15);
+          playTone(110, 'sawtooth', 0.4, 0.15, 0.15);
+          playTone(80, 'sawtooth', 0.6, 0.15, 0.3);
+          break;
+        case 'levelComplete':
+          playTone(520, 'sine', 0.15, 0.12);
+          playTone(660, 'sine', 0.15, 0.12, 0.1);
+          playTone(780, 'sine', 0.2, 0.12, 0.2);
+          playTone(1040, 'sine', 0.35, 0.12, 0.3);
+          break;
+        case 'move': // subtle step
+          playTone(200, 'sine', 0.04, 0.02);
+          break;
+      }
+    }
+
+    // --------------------------------------------------
+    // PARTICLE SYSTEM
+    // --------------------------------------------------
+
     function createParticles(x, z, color, count = 12) {
       if (!particleGroup) {
         particleGroup = new THREE.Group();
@@ -676,6 +770,8 @@
       const wx = worldX(x);
       const wz = worldZ(z);
       createParticles(wx, wz, 0x8b4513, 10); // brown dirt particles
+
+      playSound('dig');
     }
 
     // --------------------------------------------------
@@ -715,6 +811,7 @@
 
       // Walking into a monster kills the player.
       if (objectAt(x, z, 'monster')) {
+        playSound('monsterKillPlayer');
         triggerGameOver();
         return;
       }
@@ -731,6 +828,9 @@
 
         // Spawn sparkle particles when collecting a diamond
         createParticles(dx, dz, 0x00ff66, 15);
+
+        // Play collection sound
+        playSound('collect');
 
         // Check for level completion
         if (levelData.diamondsRequired > 0 && collectedDiamondCount >= levelData.diamondsRequired) {
@@ -773,6 +873,7 @@
     function completeLevel() {
       // Show level completion message
       showLevelCompleteUI();
+      playSound('levelComplete');
 
       // Mark current level as completed
       if (!completedLevels.includes(currentLevelIndex)) {
@@ -992,8 +1093,12 @@
         const wz = worldZ(oldZ);
         createParticles(wx, wz, 0x777777, 8); // grey dust particles
 
+        // Sound: boulder falls one cell
+        playSound('fall');
+
         // Kill player if boulder lands on their cell (drops onto them)
         if (playerX === x && playerZ === belowZ) {
+          playSound('crushPlayer');
           triggerGameOver();
           continue;
         }
@@ -1004,6 +1109,8 @@
           scene.remove(monster.mesh);
           gameObjects = gameObjects.filter(obj => obj !== monster);
           createParticles(worldX(x), worldZ(belowZ), 0xff0000, 12); // monster death particles
+          playSound('killMonster');
+          playSound('land');
           continue; // boulder comes to rest on the crushed monster
         }
       }
@@ -1035,6 +1142,7 @@
 
         // Kill player if monster touches them
         if (playerX === nx && playerZ === nz) {
+          playSound('monsterKillPlayer');
           triggerGameOver();
           continue;
         }
@@ -1160,6 +1268,7 @@
         `Objects: ${gameObjects.length}\n` +
         `Boulders: ${gameObjects.filter(o => o.type === 'boulder').length}\n` +
         `Monsters: ${gameObjects.filter(o => o.type === 'monster').length}\n` +
+        `Audio: ${audioEnabled ? 'ON' : 'OFF'} (click to toggle)\n` +
         `VR active: ${renderer.xr.isPresenting}\n` +
         `Frame: ${frameCount}`;
     }
@@ -1501,6 +1610,36 @@
             window.innerHeight
           );
         });
+
+        // Resume audio context on first user gesture (browsers block audio
+        // until the user interacts with the page).
+        const startAudio = () => {
+          resumeAudio();
+          const ctx = ensureAudio();
+          if (ctx) audioEnabled = true;
+        };
+        window.addEventListener('keydown', startAudio, { once: true });
+        window.addEventListener('mousedown', startAudio, { once: true });
+        window.addEventListener('touchstart', startAudio, { once: true });
+
+        // Debug panel: click to toggle audio on/off (persisted in localStorage).
+        const panel = document.getElementById('debug-panel');
+        if (panel) {
+          panel.style.cursor = 'pointer';
+          panel.addEventListener('click', () => {
+            audioEnabled = !audioEnabled;
+            localStorage.setItem('boulder-dash-audio', audioEnabled ? '1' : '0');
+            updateDebugPanel();
+            if (audioEnabled) resumeAudio();
+          });
+          // Restore persisted audio preference.
+          try {
+            const saved = localStorage.getItem('boulder-dash-audio');
+            if (saved === '0') audioEnabled = false;
+          } catch (e) {
+            // localStorage unavailable; default to on
+          }
+        }
 
         // Show level selection UI on start
         showLevelSelectionUI();
