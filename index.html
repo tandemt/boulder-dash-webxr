@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>Boulder Dash WebXR - Fixed</title>
 
   <script type="importmap">
@@ -92,6 +95,21 @@
   <script type="module">
     import * as THREE from 'three';
     import { VRButton } from 'three/addons/webxr/VRButton.js';
+
+    // Global error handler to catch initialization failures
+    window.addEventListener('error', (event) => {
+      console.error('Global error:', event.error || event.message);
+      if (typeof showError === 'function') {
+        showError(event.error || new Error(event.message));
+      }
+    });
+
+    window.addEventListener('unhandledrejection', (event) => {
+      console.error('Unhandled rejection:', event.reason);
+      if (typeof showError === 'function') {
+        showError(event.reason);
+      }
+    });
 
     // --------------------------------------------------
     // LEVELS
@@ -203,7 +221,13 @@
                    boulders.some(b => b.x === pos.x && b.y === pos.y) ||
                    monsters.some(m => m.x === pos.x && m.y === pos.y));
           grid[pos.y][pos.x] = '.'; // keep ground empty
-          monsters.push({ type: 'monster', x: pos.x, y: pos.y });
+          monsters.push({
+            type: 'monster',
+            x: pos.x,
+            y: pos.y,
+            moveTimer: 0,
+            moveInterval: 1.5 + Math.random() * 1.5
+          });
         }
       }
 
@@ -988,9 +1012,9 @@
     // Monster movement - patrol randomly
     const monsters = gameObjects.filter(obj => obj.type === 'monster');
     for (const monster of monsters) {
-      monster.userData.moveTimer -= TICK;
-      if (monster.userData.moveTimer <= 0) {
-        monster.userData.moveTimer = monster.userData.moveInterval;
+      monster.moveTimer -= TICK;
+      if (monster.moveTimer <= 0) {
+        monster.moveTimer = monster.moveInterval;
 
         // Try to move in a random direction
         const dirs = [{x: 0, z: -1}, {x: 0, z: 1}, {x: -1, z: 0}, {x: 1, z: 0}];
@@ -1429,6 +1453,16 @@
           })
         );
 
+        // Start the animation loop as early as possible so the game
+        // renders even if optional setup (controllers, UI) fails below.
+        renderer.setAnimationLoop(animate);
+      } catch (error) {
+        showError(error);
+        return;
+      }
+
+      // Optional setup — failures here should not prevent the game from running
+      try {
         controller1 = renderer.xr.getController(0);
         if (controller1) {
           controller1.addEventListener('selectstart', onSelectStart);
@@ -1485,8 +1519,6 @@
             }
           }
         });
-
-        renderer.setAnimationLoop(animate);
       } catch (error) {
         showError(error);
       }
